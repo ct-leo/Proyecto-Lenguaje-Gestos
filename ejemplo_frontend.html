@@ -198,12 +198,13 @@
         </div>
     </div>
 
-    <!-- Cargar Mediapipe desde CDN -->
-    <script type="module">
-        import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js';
-        import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1646424915/camera_utils.js';
-        import { drawConnectors, drawLandmarks } from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js';
+    <!-- Cargar Mediapipe (legacy) desde CDN como scripts globales -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
+    <!-- Script principal -->
+    <script>
         // Variables globales
         let stream = null;
         let hands = null;
@@ -352,7 +353,8 @@
 
                 hands = new Hands({
                     locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                        // Usar base sin versionar para evitar 404 en CDN
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
                     }
                 });
 
