@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-=+g#)s_xh25t4)fajafc$#c1p%5w)4ibp)wa$0rz3a#ml921-7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost', '127.0.0.1',
+    # Agrega aquí el dominio de tu backend en producción, por ejemplo:
+    # 'api.tu-dominio.com',
+]
 
 
 # Application definition
@@ -37,11 +41,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'vista01',
+    'vista02',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -121,3 +128,19 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ===== CORS / CSRF (cuando frontend y backend están en dominios distintos) =====
+# Permite solo tu dominio de frontend en producción. Ejemplo para Vercel:
+# CORS_ALLOWED_ORIGINS = ['https://tu-frontend.vercel.app']
+# En desarrollo local, puedes dejarlo vacío o usar CORS_ALLOW_ALL_ORIGINS=True temporalmente.
+
+# Descomenta y personaliza para producción segura:
+# CORS_ALLOWED_ORIGINS = [
+#     'https://tu-frontend.vercel.app',
+# ]
+# CORS_ALLOW_CREDENTIALS = True  # solo si vas a usar cookies/autenticación
+
+# CSRF_TRUSTED_ORIGINS = [
+#     'https://tu-frontend.vercel.app',
+#     'https://api.tu-dominio.com',
+# ]

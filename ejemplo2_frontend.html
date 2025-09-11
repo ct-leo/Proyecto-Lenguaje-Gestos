@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Reconocimiento de Manos - Entrenamiento (vista02)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- MediaPipe legacy solutions via CDN (URLs) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 24px;
+            color: #1f2937;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        .video-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .stage {
+            display: grid;
+            grid-template-columns: 1fr 260px;
+            gap: 18px;
+            align-items: start;
+        }
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px;
+            background: #f9fafb;
+        }
+        .detected-letter {
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1;
+            margin: 8px 0;
+            text-align: center;
+        }
+        .confidence {
+            height: 10px;
+            background: #e5e7eb;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .confidence > span {
+            display: block;
+            height: 100%;
+            width: 0%;
+            background: #10b981;
+            transition: width .2s ease;
+        }
+
+        video {
+            display: block;
+            width: 640px;
+            height: 480px;
+            border-radius: 10px;
+            background: #000;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            border-radius: 10px;
+            pointer-events: none; /* permitir clicks a los controles debajo si se diera el caso */
+            /* sin background para que se vea el video debajo */
+            z-index: 2;
+            outline: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-top: 16px;
+        }
+
+        .controls>* {
+            margin: 0;
+        }
+
+        select,
+        button {
+            font-size: 14px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            transition: transform .05s ease, background .15s ease;
+        }
+
+        button.primary {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+        button.danger {
+            background: #ef4444;
+            color: #fff;
+            border-color: #ef4444;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button:not(:disabled):active {
+            transform: translateY(1px);
+        }
+
+        .panel {
+            margin-top: 20px;
+            padding: 14px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .progress-wrap {
+            flex: 1 1 auto;
+            background: #e5e7eb;
+            height: 12px;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: #10b981;
+            height: 100%;
+            width: 0%;
+            transition: width .25s ease;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 12px;
+            background: #e0e7ff;
+            color: #1e40af;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        /* Debug HUD */
+        .hud {
+            position: absolute;
+            left: 8px;
+            top: 8px;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            font-size: 12px;
+            padding: 6px 8px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Entrenamiento de Lenguaje de Señas (A..Z) – vista02</h1>
+        <p class="muted">Reconocimiento en navegador con MediaPipe (URL/CDN). Guardado en BD vía endpoints de
+            <code>/vista02</code>.</p>
+
+        <div class="stage">
+            <div class="video-wrap">
+                <video id="cam" playsinline muted autoplay></video>
+                <canvas id="overlay" width="640" height="480"></canvas>
+                <div id="hud" class="hud" style="display:none"></div>
+            </div>
+            <div class="card">
+                <div class="muted" style="font-weight:600;">Letra detectada</div>
+                <div id="bigLetter" class="detected-letter">–</div>
+                <div class="confidence"><span id="confBar"></span></div>
+                <div class="mono muted" style="text-align:center;margin-top:6px;">
+                    Confianza: <span id="confPct">0%</span>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button id="btnLoadModel">Cargar modelo</button>
+                    <button id="btnResetDb" class="danger">Limpiar BD</button>
+                </div>
+                <div id="statusMsg" class="mono muted" style="margin-top:8px;min-height:18px;"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <label for="letter">Letra:</label>
+            <select id="letter"></select>
+
+            <button id="btnStartCam" class="primary">Iniciar cámara</button>
+            <button id="btnStopCam" class="danger" disabled>Detener cámara</button>
+
+            <button id="btnTrainSamples">Entrenar (capturar muestras)</button>
+            <button id="btnTrainModel" class="primary">Entrenar Modelo</button>
+            <button id="btnRefreshProgress">Refrescar progreso</button>
+            <label class="muted" style="display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" id="toggleMirror" checked /> Espejar overlay
+            </label>
+        </div>
+
+        <div class="panel">
+            <div class="row" style="margin-bottom:10px;">
+                <div><span class="tag">Progreso</span></div>
+                <div class="progress-wrap">
+                    <div id="bar" class="progress-bar"></div>
+                </div>
+                <div><span id="percent" class="mono">0%</span></div>
+            </div>
+            <div class="row" style="gap:22px;">
+                <div>Letra seleccionada: <strong id="currentLetter">A</strong></div>
+                <div>Total muestras (todas letras): <span id="totalSamples" class="mono">0</span></div>
+                <div>Guardadas en BD: <span id="lastSaved" class="mono">–</span></div>
+                <div>Letra detectada: <strong id="predicted">–</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== Config ==========
+        const API_BASE = "/vista02/api";
+        // Base de archivos para MediaPipe Hands (legacy). El loader buscará .wasm/.tflite dentro de este path.
+        const MP_HANDS_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/hands/";
+        const TARGET_SAMPLES_PER_LETTER = 150; // objetivo visual para la barra
+
+        // ========== Estado ==========
+        let videoEl, canvasEl, ctx, dpr = Math.max(1, window.devicePixelRatio || 1);
+        let running = false;
+        let hands;           // instancia de MediaPipe Hands (legacy)
+        let cameraHelper;    // instancia de Camera de camera_utils
+        let lastT = 0;       // para throttling manual si hiciera falta
+        const minIntervalMs = 33; // ~30 fps máx
+        let frames = 0;
+        let lastFpsT = performance.now();
+        let fps = 0;
+        let mirrorOverlay = true;
+
+        // Entrenamiento (batch)
+        let isCapturing = false;
+        const batch = [];
+        const BATCH_SIZE = 10;
+        const AUTO_FLUSH_MS = 1200; // envía lote aunque no llegue al tamaño
+        let lastFlushAt = 0;
+
+        // Modelo (centroides) para predicción local
+        let model = { feature_version: "v1", centroids: {}, letters: [] };
+        const smoothWindow = [];
+        const SMOOTH_SIZE = 7;
+        let lastPred = null;
+        let lastConf = 0;
+        // Backend prediction settings
+        const PREDICT_COOLDOWN_MS = 150;
+        let lastPredictAt = 0;
+        let predictInFlight = false;
+
+        // ========== Utilidades UI ==========
+        function $(id) { return document.getElementById(id); }
+        // Progreso por sesión local (no DB)
+        const sessionCounts = {}; // { 'A': 34, 'B': 12, ... }
+        function setProgressFromSession() {
+            const letter = $('letter').value;
+            const count = sessionCounts[letter] || 0;
+            const pct = Math.max(0, Math.min(100, Math.round(100 * count / TARGET_SAMPLES_PER_LETTER)));
+            $('bar').style.width = pct + '%';
+            $('percent').textContent = pct + '%';
+        }
+        function setTotals(total, lastLetter) {
+            $('totalSamples').textContent = String(total ?? 0);
+            $('lastSaved').textContent = lastLetter ? lastLetter : '–';
+        }
+        function setPredicted(letter, conf01) {
+            const L = letter ?? '–';
+            $('predicted').textContent = L;
+            $('bigLetter').textContent = L;
+            const pct = Math.round(100 * (conf01 ?? 0));
+            $('confPct').textContent = pct + '%';
+            $('confBar').style.width = pct + '%';
+        }
+        function lettersAZ() {
+            const arr = [];
+            for (let c = 'A'.charCodeAt(0); c <= 'Z'.charCodeAt(0); c++) arr.push(String.fromCharCode(c));
+            return arr;
+        }
+        function populateLetterSelect() {
+            const sel = $('letter');
+            sel.innerHTML = '';
+            for (const L of lettersAZ()) {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = L;
+                sel.appendChild(opt);
+            }
+            $('currentLetter').textContent = sel.value;
+            sel.addEventListener('change', () => {
+                $('currentLetter').textContent = sel.value;
+                // La barra muestra progreso de SESIÓN (local)
+                setProgressFromSession();
+                // Los totales de DB se refrescan aparte
+                refreshProgress();
+            });
+        }
+
+        // ========== MediaPipe Hands (legacy) init ==========
+        async function initHands() {
+            hands = new window.Hands({
+                locateFile: (file) => MP_HANDS_BASE + file
+            });
+            hands.setOptions({
+                selfieMode: true,             // cámara frontal
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.3,
+                minTrackingConfidence: 0.3,
+            });
+            hands.onResults(onResults);
+        }
+
+        // ========== Cámara ==========
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 640,
+                        height: 480,
+                        frameRate: { ideal: 30, max: 30 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+                videoEl.srcObject = stream;
+                await videoEl.play();
+                // Asegura que el canvas se ajuste cuando el video tenga metadata
+                if (videoEl.readyState >= 1) resizeCanvasToVideo();
+                videoEl.addEventListener('loadedmetadata', resizeCanvasToVideo, { once: true });
+                running = true;
+                // Usar Camera helper para alimentar frames a MediaPipe Hands
+                if (!hands) await initHands();
+                cameraHelper = new window.Camera(videoEl, {
+                    onFrame: async () => {
+                        await hands.send({ image: videoEl });
+                    },
+                    width: 640,
+                    height: 480
+                });
+                cameraHelper.start();
+                // Mostrar HUD
+                document.getElementById('hud').style.display = 'block';
+                $('btnStartCam').disabled = true;
+                $('btnStopCam').disabled = false;
+            } catch (err) {
+                console.error('Error al iniciar cámara:', err);
+                alert('No se pudo acceder a la cámara. Revisa permisos del navegador y que no esté en uso por otra app.');
+            }
+        }
+        function stopCamera() {
+            running = false;
+            // Detener Camera helper y liberar recursos
+            try { cameraHelper && cameraHelper.stop && cameraHelper.stop(); } catch (_) {}
+            try { hands && hands.close && hands.close(); } catch (_) {}
+            if (videoEl.srcObject) {
+                for (const t of videoEl.srcObject.getTracks()) t.stop();
+                videoEl.srcObject = null;
+            }
+            document.getElementById('hud').style.display = 'none';
+            $('btnStartCam').disabled = false;
+            $('btnStopCam').disabled = true;
+        }
+        function resizeCanvasToVideo() {
+            const w = videoEl.videoWidth || 640;
+            const h = videoEl.videoHeight || 480;
+            // Canvas 1:1 con el video para drawing_utils (usa coords normalizadas con ancho/alto del canvas)
+            canvasEl.width = w;
+            canvasEl.height = h;
+            canvasEl.style.width = w + 'px';
+            canvasEl.style.height = h + 'px';
+            // Asegura transform identidad
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+        }
+
+        // ========== Callback de resultados (MediaPipe Hands) ==========
+        function onResults(results) {
+            // Dibujar el frame de video en <video> (ya visible) y solo overlay en canvas
+            // Para alinear con selfieMode=true de MediaPipe Hands, espejamos el canvas horizontalmente
+            const doMirror = mirrorOverlay;
+            if (doMirror) {
+                ctx.setTransform(-1, 0, 0, 1, canvasEl.width, 0); // mirror X
+            } else {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+            }
+            ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+            const w = canvasEl.width;
+            const h = canvasEl.height;
+
+            // FPS y HUD
+            frames++;
+            const now = performance.now();
+            if (now - lastFpsT >= 1000) { fps = frames; frames = 0; lastFpsT = now; }
+
+            const hud = document.getElementById('hud');
+            hud.textContent = `ready:${videoEl.readyState}  ${videoEl.videoWidth}x${videoEl.videoHeight} fps:${fps}  hands:${results && results.multiHandLandmarks ? results.multiHandLandmarks.length : 0}`;
+
+            if (!results || !results.multiHandLandmarks || !results.multiHandLandmarks.length) {
+                // nada detectado en este frame: limpiar predicción visible
+                setPredicted(null, 0);
+                return;
+            }
+
+            const allHands = results.multiHandLandmarks;
+            const CONN = [
+                [0,1],[1,2],[2,3],[3,4],
+                [0,5],[5,6],[6,7],[7,8],
+                [0,9],[9,10],[10,11],[11,12],
+                [0,13],[13,14],[14,15],[15,16],
+                [0,17],[17,18],[18,19],[19,20]
+            ];
+
+            for (const lms of allHands) {
+                // Dibujo con helpers si están disponibles
+                if (window.drawConnectors && window.drawLandmarks) {
+                    window.drawConnectors(ctx, lms, CONN, { color: '#22d3ee', lineWidth: 4 });
+                    window.drawLandmarks(ctx, lms, { color: '#f97316', lineWidth: 2, radius: 5 });
+                }
+                // Dibujo manual adicional
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 3.5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                for (const [a,b] of CONN) {
+                    const ax = lms[a].x * w, ay = lms[a].y * h;
+                    const bx = lms[b].x * w, by = lms[b].y * h;
+                    ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+                }
+                ctx.stroke();
+                ctx.fillStyle = '#f97316';
+                for (const p of lms) {
+                    const x = p.x * w, y = p.y * h;
+                    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            // Captura de muestras cuando está entrenando
+            if (isCapturing) {
+                // Para entrenamiento seguimos usando solo la primera mano detectada
+                const lms0 = allHands[0];
+                const landmarks = lms0.map(p => ({ x: p.x, y: p.y, z: p.z }));
+                batch.push({ landmarks });
+                const nowB = performance.now();
+                if (batch.length >= BATCH_SIZE || (nowB - lastFlushAt) >= AUTO_FLUSH_MS) {
+                    lastFlushAt = nowB;
+                    flushBatch();
+                }
+            }
+
+            // Predicción local si tenemos modelo
+            // Predicción en backend (solo landmarks) con throttling para no saturar servidor
+            const now2 = performance.now();
+            if (!predictInFlight && (now2 - lastPredictAt) >= PREDICT_COOLDOWN_MS) {
+                const lms0 = allHands[0];
+                const landmarks = lms0.map(p => ({ x: p.x, y: p.y, z: p.z }));
+                predictInFlight = true;
+                fetch(`${API_BASE}/predict`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ landmarks })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    lastPredictAt = performance.now();
+                    if (!data || data.status !== 'ok') return;
+                    const L = data.letter || null;
+                    // Heurística de confianza a partir de distancia/umbral
+                    let conf = 0;
+                    if (typeof data.distance === 'number' && typeof data.threshold === 'number' && data.threshold > 0) {
+                        const ratio = Math.max(0, Math.min(1, data.distance / data.threshold));
+                        conf = 1 - ratio; // 1: muy confiable, 0: supera umbral
+                    }
+                    smoothWindow.push(L);
+                    if (smoothWindow.length > SMOOTH_SIZE) smoothWindow.shift();
+                    const final = majority(smoothWindow);
+                    lastConf = (lastConf * 0.7) + (conf * 0.3);
+                    setPredicted(final, lastConf);
+                })
+                .catch(() => {})
+                .finally(() => { predictInFlight = false; });
+            }
+        }
+
+        // ========== Feature extraction (JS) (equivalente ligero al backend) ==========
+        function dist(a, b) {
+            const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+            return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+        function extractFeatureVector(landmarks) {
+            if (!Array.isArray(landmarks) || landmarks.length !== 21) return null;
+            const pts = landmarks.map(p => [p.x, p.y, p.z]);
+            const wrist = pts[0];
+            const rel = pts.map(p => [p[0] - wrist[0], p[1] - wrist[1], p[2] - wrist[2]]);
+
+            const middle_mcp = rel[9];
+            const base = dist([0, 0, 0], middle_mcp);
+            const mcps = [rel[5], rel[9], rel[13], rel[17]];
+            const spread = (dist(mcps[0], mcps[1]) + dist(mcps[1], mcps[2]) + dist(mcps[2], mcps[3])) / 3;
+            const scale = Math.max(1e-6, base + spread);
+            const n = rel.map(p => [p[0] / scale, p[1] / scale, p[2] / scale]);
+
+            const fingers = {
+                thumb: [2, 3, 4],
+                index: [5, 6, 8],
+                middle: [9, 10, 12],
+                ring: [13, 14, 16],
+                pinky: [17, 18, 20],
+            };
+            const feat = [];
+            for (const key of Object.keys(fingers)) {
+                const [mcp, pip, tip] = fingers[key];
+                feat.push(dist(n[tip], n[pip]));
+                feat.push(dist(n[pip], n[mcp]));
+            }
+            const tips = [8, 12, 16, 20];
+            for (let i = 0; i < tips.length - 1; i++) feat.push(dist(n[tips[i]], n[tips[i + 1]]));
+
+            const zs = n.map(p => p[2]);
+            const meanZ = zs.reduce((a, b) => a + b, 0) / zs.length;
+            const varZ = zs.reduce((a, z) => a + (z - meanZ) * (z - meanZ), 0) / zs.length;
+            feat.push(varZ);
+            return feat;
+        }
+
+        // ========== Bucle de video ==========
+        function loop(t) {
+            if (!running) return;
+            rafId = requestAnimationFrame(loop);
+            if (t - lastT < minIntervalMs) return;
+            lastT = t;
+
+            if (videoEl.readyState < 2) return;
+            const res = handLandmarker.detectForVideo(videoEl, performance.now());
+            const lms = res && res.landmarks && res.landmarks[0];
+            drawLandmarks(lms);
+
+            // Captura de muestras cuando está entrenando
+            if (isCapturing && lms) {
+                batch.push({ landmarks: lms });
+                if (batch.length >= BATCH_SIZE) {
+                    flushBatch();
+                }
+            }
+
+            // Predicción local si tenemos modelo
+            if (lms && model.centroids && Object.keys(model.centroids).length) {
+                const fv = extractFeatureVector(lms);
+                if (fv) {
+                    const pred = predictLetter(fv, model.centroids);
+                    smoothWindow.push(pred || null);
+                    if (smoothWindow.length > SMOOTH_SIZE) smoothWindow.shift();
+                    const final = majority(smoothWindow);
+                    setPredicted(final);
+                }
+            }
+        }
+
+        function majority(arr) {
+            const counts = {};
+            for (const v of arr) { if (!v) continue; counts[v] = (counts[v] || 0) + 1; }
+            let best = null, bestC = 0;
+            for (const k in counts) { if (counts[k] > bestC) { best = k; bestC = counts[k]; } }
+            return best;
+        }
+
+        function l2(a, b) {
+            let s = 0;
+            const m = Math.min(a.length, b.length);
+            for (let i = 0; i < m; i++) { const d = (a[i] || 0) - (b[i] || 0); s += d * d; }
+            return Math.sqrt(s);
+        }
+        function predictLetterWithConfidence(fv, centroids) {
+            let best = null, bestD = Infinity, secondD = Infinity;
+            for (const L of Object.keys(centroids)) {
+                const d = l2(fv, centroids[L]);
+                if (d < bestD) { secondD = bestD; bestD = d; best = L; }
+                else if (d < secondD) { secondD = d; }
+            }
+            // Confianza: combinación de dos heurísticas para evitar 0 constante
+            // 1) Separación relativa (segundo - primero)
+            let confSep = 0;
+            if (isFinite(bestD) && isFinite(secondD)) {
+                const sep = Math.max(0, secondD - bestD);
+                confSep = Math.max(0, Math.min(1, sep / (secondD + 1e-6)));
+            }
+            // 2) Distancia absoluta al mejor (más cerca = mejor). k ajusta sensibilidad
+            const k = 3.0;
+            const confDist = isFinite(bestD) ? Math.exp(-bestD / k) : 0;
+            const conf = Math.max(confSep, confDist);
+            return { letter: best, conf };
+        }
+
+        // ========== API ==========
+        async function flushBatch() {
+            if (!batch.length) return;
+            const letter = $('letter').value;
+            const payload = { letter, samples: batch.splice(0, batch.length) };
+            // Fire-and-forget para no bloquear el render ni la detección
+            fetch(`${API_BASE}/samples/batch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data && data.status === 'ok') {
+                    // Actualizar barra de SESIÓN: sumamos las insertadas en esta llamada
+                    const inc = Number(data.inserted || payload.samples.length || 0) || 0;
+                    sessionCounts[letter] = (sessionCounts[letter] || 0) + inc;
+                    setProgressFromSession();
+                    const total = Object.values(data.totals || {}).reduce((a, b) => a + b, 0);
+                    setTotals(total, letter);
+                }
+            })
+            .catch(() => {});
+        }
+
+        async function refreshProgress() {
+            const r = await fetch(`${API_BASE}/progress`);
+            const data = await r.json();
+            if (data.status === 'ok') {
+                // La barra de progreso es SOLO DE SESIÓN: no usar totales de DB aquí
+                setProgressFromSession();
+                setTotals(data.total, null);
+            }
+            const lr = await fetch(`${API_BASE}/last-detected`);
+            const ld = await lr.json();
+            if (ld.status === 'ok') {
+                $('lastSaved').textContent = ld.letter || '–';
+            }
+        }
+
+        async function trainModel() {
+            const r = await fetch(`${API_BASE}/train`, { method: 'POST' });
+            const data = await r.json();
+            if (data.status === 'ok') {
+                // descargar modelo más reciente para predicción local
+                await loadLatestModel();
+            }
+        }
+
+        async function loadLatestModel() {
+            const mr = await fetch(`${API_BASE}/model`);
+            const md = await mr.json();
+            if (md.status === 'ok') {
+                model.feature_version = md.feature_version;
+                model.centroids = md.centroids || {};
+                model.letters = md.letters || [];
+            }
+        }
+
+        // ========== Event handlers ==========
+        $('btnStartCam').addEventListener('click', async () => {
+            await startCamera();
+        });
+
+        $('btnStopCam').addEventListener('click', () => {
+            stopCamera();
+        });
+
+        $('btnTrainSamples').addEventListener('click', async () => {
+            if (!running) { $('statusMsg').textContent = 'Primero inicia la cámara.'; return; }
+            if (isCapturing) {
+                isCapturing = false;
+                await flushBatch();
+                await refreshProgress();
+                $('btnTrainSamples').textContent = 'Entrenar (capturar muestras)';
+            } else {
+                // empieza captura
+                isCapturing = true;
+                $('btnTrainSamples').textContent = 'Detener captura';
+                $('statusMsg').textContent = 'Capturando muestras...';
+            }
+        });
+        $('btnTrainModel').addEventListener('click', async () => {
+            await flushBatch();
+            await trainModel();
+            $('statusMsg').textContent = 'Modelo entrenado y cargado. Mueve tu mano para ver la letra.';
+        });
+        $('btnRefreshProgress').addEventListener('click', async (ev) => {
+            // No borrar DB. Solo detener captura (si estaba), vaciar batch local, limpiar predicción y refrescar conteos
+            const btn = ev.currentTarget;
+            btn.disabled = true;
+            try {
+                isCapturing = false;
+                batch.splice(0, batch.length);
+                smoothWindow.splice(0, smoothWindow.length);
+                lastConf = 0;
+                setPredicted(null, 0);
+                $('btnTrainSamples').textContent = 'Entrenar (capturar muestras)';
+                // Reiniciar SOLO la barra de la letra actual
+                sessionCounts[$('letter').value] = 0;
+                setProgressFromSession();
+                await refreshProgress();
+                $('statusMsg').textContent = 'Listo. Puedes seleccionar otra letra y empezar a capturar.';
+            } finally {
+                btn.disabled = false;
+            }
+        });
+        $('btnLoadModel').addEventListener('click', async () => {
+            await loadLatestModel();
+            $('statusMsg').textContent = 'Modelo cargado. Mueve tu mano para ver la letra.';
+        });
+
+        // Limpia TODA la BD (todas las muestras y modelos). Úsalo con cuidado.
+        $('btnResetDb').addEventListener('click', async (ev) => {
+            const btn = ev.currentTarget;
+            btn.disabled = true;
+            $('statusMsg').textContent = 'Limpiando base de datos...';
+            try {
+                const r = await fetch(`${API_BASE}/reset`, { method: 'POST' });
+                let data = null;
+                try { data = await r.json(); } catch (_) { data = null; }
+                if (!r.ok || !data || data.status !== 'ok') {
+                    console.error('reset response', r.status, data);
+                    throw new Error('Reset falló');
+                }
+                // limpiar estado local
+                isCapturing = false;
+                batch.splice(0, batch.length);
+                smoothWindow.splice(0, smoothWindow.length);
+                lastConf = 0;
+                setPredicted(null, 0);
+                $('btnTrainSamples').textContent = 'Entrenar (capturar muestras)';
+                // reiniciar progreso de sesión para TODAS las letras
+                for (const L of lettersAZ()) sessionCounts[L] = 0;
+                setProgressFromSession();
+                await refreshProgress();
+                $('statusMsg').textContent = 'Base de datos limpiada. Entrena de nuevo y crea un nuevo modelo.';
+            } catch (e) {
+                $('statusMsg').textContent = 'Error al limpiar BD. Revisa el servidor.';
+                console.error('Error reset BD:', e);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // ========== Boot ==========
+        window.addEventListener('load', () => {
+            videoEl = $('cam');
+            canvasEl = $('overlay');
+            ctx = canvasEl.getContext('2d');
+            populateLetterSelect();
+            // Intentar cargar el último modelo al iniciar para detección inmediata
+            loadLatestModel().catch(()=>{});
+            setProgressFromSession();
+            refreshProgress();
+        });
+        window.addEventListener('resize', () => {
+            if (running) resizeCanvasToVideo();
+        });
+        document.getElementById('toggleMirror').addEventListener('change', (e) => {
+            mirrorOverlay = e.target.checked;
+        });
+    </script>
+</body>
+
+</html>
