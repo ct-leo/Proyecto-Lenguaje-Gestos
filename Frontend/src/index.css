@@ -1,0 +1,91 @@
+:root {
+  /* Paleta solicitada */
+  --bg: #FAFAFA;             /* Marfil – fondo principal */
+  --text: #2E2E2E;           /* Grafito – tipografía */
+  --border: #C4C4C4;         /* Plata suave – bordes y divisores */
+  --surface: #FFFFFF;        /* Superficie principal (cards) */
+  --muted-surface: #E5DED3;  /* Beige cálido – fondos alternativos */
+
+  --primary: #0FA958;        /* Verde esmeralda – acento */
+  --primary-600: #0c8a48;
+  --primary-700: #0a713b;
+  --accent: #0FA958;         /* usar el mismo acento */
+  --danger: #ef4444;         /* se mantiene para acciones destructivas */
+  --danger-600: #dc2626;
+  --code: #111827;           /* panel para bloques pre/monospace */
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.2rem;
+  line-height: 1.2;
+}
+
+button {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 0.6em 1.0em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  background-color: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.02s ease;
+}
+button:hover {
+  transform: translateY(-1px);
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid var(--primary);
+}
+
+/* Forzamos paleta clara por defecto */
+
+/* cards and layout helpers */
+.card {
+  background: #ffffff10;
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.25);
+}
+
+.soft-card {
+  background: #ffffff08;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.muted-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
