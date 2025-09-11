@@ -25,6 +25,7 @@
         .camera-container {
             text-align: center;
             margin: 20px 0;
+            position: relative;
         }
         #video {
             width: 100%;
@@ -33,7 +34,15 @@
             border-radius: 10px;
         }
         #canvas {
-            display: none;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            pointer-events: none;
         }
         .controls {
             text-align: center;
@@ -95,14 +104,30 @@
             background: white;
             border-radius: 3px;
         }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.loading {
+            color: #007bff;
+        }
+        .status.ready {
+            color: #28a745;
+        }
+        .status.error {
+            color: #dc3545;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1> Reconocimiento de Gestos de Mano</h1>
+        <h1>Reconocimiento de Gestos de Mano</h1>
         <p style="text-align: center; color: #666;">
-            Detecta letras vocales (A, E, I, O, U) usando gestos de mano
+            Detecta letras vocales (A, E, I, O, U) usando gestos de mano con Mediapipe
         </p>
+
+        <div class="status" id="mediapipeStatus">Cargando Mediapipe...</div>
 
         <div class="camera-container">
             <video id="video" autoplay muted></video>
@@ -118,7 +143,7 @@
         <div id="result" class="result" style="display: none;"></div>
 
         <div class="gestos-info">
-            <h3> Gestos Reconocidos</h3>
+            <h3>Gestos Reconocidos</h3>
             <div class="gesto"><strong>A:</strong> Pulgar extendido, otros dedos cerrados</div>
             <div class="gesto"><strong>E:</strong> Todos los dedos extendidos</div>
             <div class="gesto"><strong>I:</strong> Índice y medio extendidos, otros doblados</div>
@@ -127,8 +152,16 @@
         </div>
     </div>
 
-    <script>
+    <!-- Cargar Mediapipe desde CDN -->
+    <script type="module">
+        import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js';
+        import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1646424915/camera_utils.js';
+        import { drawConnectors, drawLandmarks } from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js';
+
+        // Variables globales
         let stream = null;
+        let hands = null;
+        let camera = null;
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -136,7 +169,150 @@
         const startBtn = document.getElementById('startBtn');
         const captureBtn = document.getElementById('captureBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('mediapipeStatus');
 
+        // Función para detectar gesto vocal
+        function detectarGestoVocal(landmarks) {
+            try {
+                // Extraer coordenadas de puntos clave
+                const thumb_tip = landmarks[4];
+                const thumb_ip = landmarks[3];
+                const thumb_mcp = landmarks[2];
+                
+                const index_tip = landmarks[8];
+                const index_pip = landmarks[6];
+                const index_mcp = landmarks[5];
+                
+                const middle_tip = landmarks[12];
+                const middle_pip = landmarks[10];
+                const middle_mcp = landmarks[9];
+                
+                const ring_tip = landmarks[16];
+                const ring_pip = landmarks[14];
+                const ring_mcp = landmarks[13];
+                
+                const pinky_tip = landmarks[20];
+                const pinky_pip = landmarks[18];
+                const pinky_mcp = landmarks[17];
+                
+                // Función auxiliar para calcular si un dedo está extendido
+                function dedoExtendido(tip, pip, mcp) {
+                    return tip.y < pip.y && pip.y < mcp.y;
+                }
+                
+                // Función auxiliar para calcular si un dedo está doblado
+                function dedoDoblado(tip, pip, mcp) {
+                    return tip.y > pip.y && pip.y > mcp.y;
+                }
+                
+                // Detectar gestos específicos para cada vocal
+                
+                // A - Mano cerrada con pulgar extendido
+                if (dedoExtendido(thumb_tip, thumb_ip, thumb_mcp) &&
+                    dedoDoblado(index_tip, index_pip, index_mcp) &&
+                    dedoDoblado(middle_tip, middle_pip, middle_mcp) &&
+                    dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
+                    dedoDoblado(pinky_tip, pinky_pip, pinky_mcp)) {
+                    return 'A', 0.9;
+                }
+                
+                // E - Todos los dedos extendidos
+                else if (dedoExtendido(thumb_tip, thumb_ip, thumb_mcp) &&
+                          dedoExtendido(index_tip, index_pip, index_mcp) &&
+                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
+                          dedoExtendido(ring_tip, ring_pip, ring_mcp) &&
+                          dedoExtendido(pinky_tip, pinky_pip, pinky_mcp)) {
+                    return 'E', 0.9;
+                }
+                
+                // I - Solo índice y medio extendidos
+                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
+                          dedoExtendido(index_tip, index_pip, index_mcp) &&
+                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
+                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
+                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp)) {
+                    return 'I', 0.8;
+                }
+                
+                // O - Mano cerrada en forma de círculo
+                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
+                          dedoDoblado(index_tip, index_pip, index_mcp) &&
+                          dedoDoblado(middle_tip, middle_pip, middle_mcp) &&
+                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
+                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp) &&
+                          Math.abs(thumb_tip.x - index_tip.x) < 0.1) {
+                    return 'O', 0.8;
+                }
+                
+                // U - Índice y medio juntos, otros doblados
+                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
+                          dedoExtendido(index_tip, index_pip, index_mcp) &&
+                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
+                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
+                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp) &&
+                          Math.abs(index_tip.x - middle_tip.x) < 0.05) {
+                    return 'U', 0.8;
+                }
+                
+                else {
+                    return null, 0.0;
+                }
+                    
+            } catch (error) {
+                console.error('Error en detección de gesto:', error);
+                return null, 0.0;
+            }
+        }
+
+        // Inicializar Mediapipe Hands
+        async function initializeMediapipe() {
+            try {
+                statusDiv.textContent = 'Inicializando Mediapipe...';
+                statusDiv.className = 'status loading';
+
+                hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                    }
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onResults);
+
+                statusDiv.textContent = 'Mediapipe listo';
+                statusDiv.className = 'status ready';
+                
+            } catch (error) {
+                console.error('Error inicializando Mediapipe:', error);
+                statusDiv.textContent = 'Error cargando Mediapipe: ' + error.message;
+                statusDiv.className = 'status error';
+            }
+        }
+
+        // Función callback para procesar resultados de Mediapipe
+        function onResults(results) {
+            // Limpiar canvas
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar landmarks si se detecta una mano
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                    drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
+                }
+            }
+            
+            ctx.restore();
+        }
+
+        // Función para iniciar la cámara
         async function startCamera() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ 
@@ -146,7 +322,25 @@
                         facingMode: 'user'
                     } 
                 });
+                
                 video.srcObject = stream;
+                
+                // Configurar canvas con las dimensiones del video
+                canvas.width = 640;
+                canvas.height = 480;
+                
+                // Inicializar cámara de Mediapipe
+                camera = new Camera(video, {
+                    onFrame: async () => {
+                        if (hands) {
+                            await hands.send({image: video});
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                camera.start();
                 
                 startBtn.disabled = true;
                 captureBtn.disabled = false;
@@ -158,11 +352,17 @@
             }
         }
 
+        // Función para detener la cámara
         function stopCamera() {
             if (stream) {
                 stream.getTracks().forEach(track => track.stop());
                 stream = null;
                 video.srcObject = null;
+                
+                if (camera) {
+                    camera.stop();
+                    camera = null;
+                }
                 
                 startBtn.disabled = false;
                 captureBtn.disabled = true;
@@ -172,38 +372,72 @@
             }
         }
 
-        function captureAndRecognize() {
-            if (!stream) {
-                showResult('Primero inicia la cámara', 'error');
+        // Función para capturar y reconocer
+        async function captureAndRecognize() {
+            if (!stream || !hands) {
+                showResult('Primero inicia la cámara y espera a que Mediapipe esté listo', 'error');
                 return;
             }
 
-            // Configurar canvas con las dimensiones del video
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            // Capturar frame del video
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // Convertir a base64
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
-            
-            // Mostrar loading
             showResult('Procesando imagen...', 'loading');
             
-            // Enviar a la API
-            recognizeGesture(imageData);
+            try {
+                // Capturar frame del video
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = video.videoWidth;
+                tempCanvas.height = video.videoHeight;
+                tempCtx.drawImage(video, 0, 0);
+                
+                // Convertir a base64
+                const imageData = tempCanvas.toDataURL('image/jpeg', 0.8);
+                
+                // Procesar con Mediapipe
+                const results = await hands.process({image: video});
+                
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // Detectar gesto vocal
+                    const [letraDetectada, confianza] = detectarGestoVocal(landmarks);
+                    
+                    if (letraDetectada) {
+                        // Extraer coordenadas de la mano
+                        const coordenadasMano = landmarks.map(landmark => ({
+                            x: landmark.x,
+                            y: landmark.y,
+                            z: landmark.z
+                        }));
+                        
+                        // Enviar resultado al backend
+                        await guardarResultado(imageData, letraDetectada, confianza, coordenadasMano);
+                        
+                    } else {
+                        showResult('No se pudo reconocer un gesto vocal válido (A, E, I, O, U)', 'error');
+                    }
+                } else {
+                    showResult('No se detectó ninguna mano en la imagen', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Error en reconocimiento:', error);
+                showResult('Error al procesar la imagen: ' + error.message, 'error');
+            }
         }
 
-        async function recognizeGesture(imageBase64) {
+        // Función para guardar resultado en el backend
+        async function guardarResultado(imagenBase64, letraDetectada, confianza, coordenadasMano) {
             try {
-                const response = await fetch('/vista01/reconocer/', {
+                const response = await fetch('/vista01/guardar-resultado/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        imagen: imageBase64
+                        imagen: imagenBase64,
+                        letra_detectada: letraDetectada,
+                        confianza: confianza,
+                        coordenadas_mano: coordenadasMano
                     })
                 });
 
@@ -217,18 +451,27 @@
                         'success'
                     );
                 } else {
-                    showResult(` Error: ${data.mensaje}`, 'error');
+                    showResult(`❌ Error: ${data.mensaje}`, 'error');
                 }
             } catch (error) {
-                showResult(` Error de conexión: ${error.message}`, 'error');
+                showResult(`❌ Error de conexión: ${error.message}`, 'error');
             }
         }
 
+        // Función para mostrar resultados
         function showResult(message, type) {
             resultDiv.innerHTML = message;
             resultDiv.className = `result ${type}`;
             resultDiv.style.display = 'block';
         }
+
+        // Hacer funciones globales
+        window.startCamera = startCamera;
+        window.stopCamera = stopCamera;
+        window.captureAndRecognize = captureAndRecognize;
+
+        // Inicializar Mediapipe al cargar la página
+        initializeMediapipe();
 
         // Limpiar al cerrar la página
         window.addEventListener('beforeunload', stopCamera);

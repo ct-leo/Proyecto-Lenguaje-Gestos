@@ -1,17 +1,37 @@
 # API de Reconocimiento de Manos - Vista01
 
 ## Descripción
-Esta API implementa el reconocimiento de gestos de mano utilizando Mediapipe y TensorFlow para detectar letras vocales (A, E, I, O, U) desde imágenes en base64.
+Esta API implementa el reconocimiento de gestos de mano utilizando Mediapipe en el frontend para detectar letras vocales (A, E, I, O, U). El backend Django solo maneja el almacenamiento de resultados ya procesados en la base de datos temporal.
+
+## Arquitectura
+- **Frontend**: Procesa video en tiempo real, detecta manos y reconoce gestos usando Mediapipe desde CDN
+- **Backend**: Recibe resultados procesados y los almacena en la base de datos temporal
+- **Comunicación**: JSON entre frontend y backend
 
 ## Endpoints Disponibles
 
-### 1. POST /vista01/reconocer/
-Reconoce gestos de mano desde una imagen en base64.
+### 1. GET /vista01/
+Sirve la interfaz web del frontend con Mediapipe integrado.
+
+**Response:** HTML con interfaz de reconocimiento de manos
+
+### 2. POST /vista01/guardar-resultado/
+Guarda resultados de reconocimiento de manos ya procesados en el frontend.
 
 **Request:**
 ```json
 {
-    "imagen": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ..."
+    "imagen": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...",
+    "letra_detectada": "A",
+    "confianza": 0.9,
+    "coordenadas_mano": [
+        {
+            "x": 0.5,
+            "y": 0.3,
+            "z": 0.1
+        }
+        // ... más coordenadas (21 landmarks)
+    ]
 }
 ```
 
@@ -31,7 +51,7 @@ Reconoce gestos de mano desde una imagen en base64.
     ],
     "id_temporal": 1,
     "timestamp": "2024-01-15T10:30:00Z",
-    "mensaje": "Gesto reconocido como vocal \"A\" con confianza 0.90"
+    "mensaje": "Resultado guardado: vocal \"A\" con confianza 0.90"
 }
 ```
 
@@ -39,11 +59,11 @@ Reconoce gestos de mano desde una imagen en base64.
 ```json
 {
     "estado": "error",
-    "mensaje": "No se detectó ninguna mano en la imagen"
+    "mensaje": "La letra detectada debe ser una vocal (A, E, I, O, U)"
 }
 ```
 
-### 2. GET /vista01/estadisticas/
+### 3. GET /vista01/estadisticas/
 Obtiene estadísticas de las detecciones realizadas.
 
 **Response:**
@@ -61,6 +81,20 @@ Obtiene estadísticas de las detecciones realizadas.
     "datos_entrenados": 75
 }
 ```
+
+## Frontend - Mediapipe desde CDN
+
+### Librerías Cargadas
+- `@mediapipe/hands@0.4.1646424915` - Detección de manos
+- `@mediapipe/camera_utils@0.3.1646424915` - Utilidades de cámara
+- `@mediapipe/drawing_utils@0.3.1620248257` - Utilidades de dibujo
+
+### Funcionalidades del Frontend
+- **Acceso a cámara**: Captura video en tiempo real
+- **Detección de manos**: Procesa frames con Mediapipe Hands
+- **Reconocimiento de gestos**: Detecta vocales A, E, I, O, U
+- **Visualización**: Muestra landmarks de la mano en tiempo real
+- **Envío de datos**: Envía resultados procesados al backend
 
 ## Gestos Reconocidos
 
@@ -87,12 +121,12 @@ Obtiene estadísticas de las detecciones realizadas.
 
 ### bd_temporal (DatosTemporales)
 Almacena temporalmente las detecciones para posterior procesamiento:
-- `imagen_base64`: Imagen original
-- `letra_detectada`: Vocal detectada
+- `imagen_base64`: Imagen original capturada
+- `letra_detectada`: Vocal detectada (A, E, I, O, U)
 - `confianza`: Nivel de confianza (0.0-1.0)
-- `coordenadas_mano`: Puntos de landmarks de Mediapipe
+- `coordenadas_mano`: Array de 21 landmarks de Mediapipe
 - `timestamp`: Fecha y hora de detección
-- `procesado`: Indica si ya fue procesado
+- `procesado`: Indica si ya fue procesado para entrenamiento
 
 ### bd_entrenada (DatosEntrenados)
 Almacena datos validados para entrenamiento supervisado:
@@ -119,17 +153,46 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+4. Abrir navegador:
+```
+http://localhost:8000/vista01/
+```
+
 ## Dependencias Principales
 - Django 5.2.6
-- Mediapipe 0.10.8
-- TensorFlow 2.15.0
-- OpenCV 4.8.1.78
-- NumPy 1.24.3
-- Pillow 10.1.0
+- asgiref 3.9.1
+- sqlparse 0.5.3
+- tzdata 2025.2
+
+**Nota**: Mediapipe, TensorFlow, OpenCV y otras dependencias pesadas han sido eliminadas del backend y se cargan desde CDN en el frontend.
 
 ## Notas Técnicas
-- La API utiliza Mediapipe para detección de landmarks de mano
+
+### Frontend
+- Utiliza Mediapipe Hands para detección de landmarks en tiempo real
 - Los gestos se detectan basándose en la posición relativa de los dedos
-- Las imágenes deben contener una mano claramente visible
-- La confianza mínima de detección es 0.7
-- Los datos se almacenan temporalmente para posterior entrenamiento supervisado
+- Visualización de landmarks de la mano en el canvas
+- Procesamiento completamente en el cliente
+
+### Backend
+- Solo maneja almacenamiento de resultados ya procesados
+- Validación de datos recibidos del frontend
+- Sin dependencias de procesamiento de imágenes
+- Arquitectura ligera y escalable
+
+### Requisitos del Cliente
+- Navegador moderno con soporte para:
+  - WebRTC (acceso a cámara)
+  - ES6 Modules
+  - Canvas API
+- Conexión a internet (para cargar Mediapipe desde CDN)
+
+### Flujo de Trabajo
+1. Usuario accede a `/vista01/`
+2. Frontend carga Mediapipe desde CDN
+3. Usuario permite acceso a cámara
+4. Frontend procesa video en tiempo real
+5. Usuario hace gesto y hace clic en "Capturar y Reconocer"
+6. Frontend detecta gesto y envía resultado al backend
+7. Backend valida y almacena en `bd_temporal`
+8. Frontend muestra resultado al usuario
