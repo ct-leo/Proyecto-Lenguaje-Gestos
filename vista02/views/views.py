@@ -19,11 +19,11 @@ def samples_batch(request):
     Recibe un lote de muestras para una letra.
     Body JSON:
     {
-      "letter": "A",
-      "samples": [
+    "letter": "A",
+    "samples": [
         {"landmarks": [ {"x":..,"y":..,"z":..}, ... (21) ... ], "feature": [ ... ]},
         ...
-      ]
+    ]
     }
     """
     try:
@@ -91,10 +91,15 @@ def train_model(request):
         return JsonResponse({"status": "error", "message": "No hay muestras para entrenar"}, status=400)
 
     centroids = compute_centroids(by_letter)
+    # Calcular umbrales por percentil (usa valor por defecto en trainer.py)
+    thresholds = compute_thresholds(by_letter, centroids)  # devuelve { 'A': thrA, ... }
     model = TrainingModel.objects.create(
         feature_version="v1",
         centroids=centroids,
-        letters=sorted(list(by_letter.keys()))
+        letters=sorted(list(by_letter.keys())),
+        thresholds=thresholds,
+        threshold_method="percentile",
+        threshold_param=0.88,
     )
 
     return JsonResponse({
@@ -102,6 +107,7 @@ def train_model(request):
         "model_id": model.id,
         "letters": model.letters,
         "centroids": model.centroids,
+        "thresholds": model.thresholds,
         "created_at": model.created_at.isoformat(),
     })
 
@@ -127,6 +133,9 @@ def get_model(request):
         "feature_version": model.feature_version,
         "centroids": model.centroids,
         "letters": model.letters,
+        "thresholds": getattr(model, 'thresholds', {}),
+        "threshold_method": getattr(model, 'threshold_method', 'percentile'),
+        "threshold_param": getattr(model, 'threshold_param', None),
         "created_at": model.created_at.isoformat(),
     })
 
@@ -190,36 +199,43 @@ def predict(request):
 
     lms = payload.get("landmarks")
     fv = payload.get("feature")
-    if fv is None:
-        if not isinstance(lms, list) or len(lms) != 21:
-            return JsonResponse({"status": "error", "message": "landmarks faltan o inválidos"}, status=400)
+    # Preferimos extraer en servidor para asegurar coherencia con el modelo entrenado
+    if isinstance(lms, list) and len(lms) == 21:
         try:
             fv = extract_feature_vector(lms)
         except Exception:
             return JsonResponse({"status": "error", "message": "no se pudo extraer feature"}, status=400)
+    elif fv is None:
+        return JsonResponse({"status": "error", "message": "landmarks o feature faltan"}, status=400)
 
     # Cargar último modelo (centroides)
     model = TrainingModel.objects.order_by("-created_at").first()
     if not model:
         return JsonResponse({"status": "ok", "letter": None, "distance": None, "threshold": None})
 
-    # Construir by_letter desde BD para umbrales
-    by_letter = {}
-    qs = HandSample.objects.filter(letter__in=model.letters).only("letter", "feature_vector", "landmarks")
-    for hs in qs:
-        vec = hs.feature_vector
-        if not isinstance(vec, list):
-            try:
-                vec = extract_feature_vector(hs.landmarks)
-            except Exception:
-                continue
-        by_letter.setdefault(hs.letter, []).append(vec)
-
-    thresholds = compute_thresholds(by_letter, model.centroids)
-    letter, dist, thr = predict_with_thresholds(fv, model.centroids, thresholds)
+    # Usar umbrales persistidos con el modelo para consistencia
+    thresholds = model.thresholds or {}
+    letter, dist, thr, shape_ok = predict_with_thresholds(fv, model.centroids, thresholds)
+    # Además, calcular candidato más cercano (aunque no pase umbral) para diagnóstico
+    bestL = None
+    bestD = float('inf')
+    for L, c in model.centroids.items():
+        # l2 aquí replicando trainer._l2 para evitar import interno
+        m = min(len(fv), len(c))
+        s = 0.0
+        for i in range(m):
+            d = float(fv[i]) - float(c[i])
+            s += d * d
+        dL = s ** 0.5
+        if dL < bestD:
+            bestD = dL
+            bestL = L
     return JsonResponse({
         "status": "ok",
         "letter": letter,
         "distance": dist,
         "threshold": thr,
+        "shape_ok": bool(shape_ok),
+        "candidate": bestL,
+        "candidate_distance": bestD,
     })

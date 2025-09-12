@@ -24,6 +24,13 @@ class TrainingModel(models.Model):
     # Centroides por letra: {"A": [...], "B": [...], ...}
     centroids = models.JSONField()
     letters = models.JSONField()  # lista de letras incluidas
+    # Umbrales por letra persistidos tras el entrenamiento
+    thresholds = models.JSONField(default=dict)
+    # Desviaciones estándar por letra (lista por feature) para distancia estandarizada
+    feature_stds = models.JSONField(default=dict)
+    # Metadata opcional sobre cómo fueron calculados los umbrales
+    threshold_method = models.CharField(max_length=32, default="percentile")
+    threshold_param = models.FloatField(default=0.88)  # p.ej., percentil usado
 
     class Meta:
         ordering = ["-created_at"]
