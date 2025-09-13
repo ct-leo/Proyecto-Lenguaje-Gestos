@@ -134,9 +134,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS_ALLOWED_ORIGINS = ['https://tu-frontend.vercel.app']
 # En desarrollo local, puedes dejarlo vacío o usar CORS_ALLOW_ALL_ORIGINS=True temporalmente.
 
-# Desarrollo: permitir CORS desde cualquier origen (ajustar para producción)
-CORS_ALLOW_ALL_ORIGINS = True
-
 # Descomenta y personaliza para producción segura:
 # CORS_ALLOWED_ORIGINS = [
 #     'https://tu-frontend.vercel.app',

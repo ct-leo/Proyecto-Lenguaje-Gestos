@@ -44,11 +44,18 @@
             background: #f9fafb;
         }
         .detected-letter {
-            font-size: 56px;
+            font-size: clamp(36px, 8vw, 56px);
             font-weight: 800;
-            line-height: 1;
+            line-height: 1.1;
             margin: 8px 0;
             text-align: center;
+            word-break: break-word;
+        }
+        /* Estilo cuando mostramos 'Procesando...' para que no desborde ni se vea enorme */
+        .detected-letter.processing {
+            font-size: clamp(22px, 4.5vw, 28px);
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
         .confidence {
             height: 10px;
@@ -221,9 +228,6 @@
             <label for="letter">Letra:</label>
             <select id="letter"></select>
 
-            <button id="btnStartCam" class="primary">Iniciar cámara</button>
-            <button id="btnStopCam" class="danger" disabled>Detener cámara</button>
-
             <button id="btnTrainSamples">Entrenar (capturar muestras)</button>
             <button id="btnTrainModel" class="primary">Entrenar Modelo</button>
             <button id="btnRefreshProgress">Refrescar progreso</button>
@@ -274,17 +278,35 @@
         const BATCH_SIZE = 10;
         const AUTO_FLUSH_MS = 1200; // envía lote aunque no llegue al tamaño
         let lastFlushAt = 0;
+        // Permitir abortar el envío de un batch en curso al detener captura
+        let batchAbortController = null;
 
         // Modelo (centroides) para predicción local
         let model = { feature_version: "v1", centroids: {}, letters: [] };
         const smoothWindow = [];
         const SMOOTH_SIZE = 7;
-        let lastPred = null;
         let lastConf = 0;
         // Backend prediction settings
-        const PREDICT_COOLDOWN_MS = 150;
+        const PREDICT_COOLDOWN_MS = 120; // un poco más rápido
         let lastPredictAt = 0;
         let predictInFlight = false;
+        let predictAbortController = null;
+        // Histeresis para estabilidad de letra y confianza
+        const HOLD_MS = 350;           // tiempo mínimo para mantener la letra aunque fluctúe
+        const RELAX_RATIO = 1.15;      // margen extra sobre el umbral para no soltar de inmediato
+        let holdLetter = null;         // última letra aceptada
+        let holdThr = 0;               // umbral asociado a esa letra
+        let holdAt = 0;                // timestamp de la última aceptación
+        // Bloqueo (lock-on) adicional para evitar parpadeos
+        const LOCK_CONF_THRESHOLD = 0.50;   // conf para fijar el bloqueo
+        const UNLOCK_RELAX_RATIO = 1.20;    // margen para mantener bloqueo
+        const UNLOCK_GRACE_MS = 700;        // ventana de gracia antes de soltar
+        const CHANGE_CONFIRM_FRAMES = 3;    // frames consecutivos de mismatch para soltar
+        let lockLetter = null;
+        let lockThr = 0;
+        let lockUpdatedAt = 0;
+        let mismatchCount = 0;
+        let stopping = false;          // evita condiciones de carrera al reiniciar
 
         // ========== Utilidades UI ==========
         function $(id) { return document.getElementById(id); }
@@ -302,10 +324,14 @@
             $('lastSaved').textContent = lastLetter ? lastLetter : '–';
         }
         function setPredicted(letter, conf01) {
-            const L = letter ?? '–';
-            $('predicted').textContent = L;
-            $('bigLetter').textContent = L;
-            const pct = Math.round(100 * (conf01 ?? 0));
+            const conf = Math.max(0, Math.min(1, conf01 ?? 0));
+            const pct = Math.round(100 * conf);
+            const showLetter = (conf >= 0.5) && !!letter;
+            const text = showLetter ? letter : 'Procesando...';
+            $('predicted').textContent = text;
+            $('bigLetter').textContent = text;
+            // Alterna estilo para evitar desbordes cuando es texto largo
+            $('bigLetter').classList.toggle('processing', !showLetter);
             $('confPct').textContent = pct + '%';
             $('confBar').style.width = pct + '%';
         }
@@ -349,7 +375,27 @@
 
         // ========== Cámara ==========
         async function startCamera() {
+            if (stopping) {
+                // espera breve si estamos en proceso de detener
+                await new Promise(r => setTimeout(r, 60));
+                if (stopping) return; // evita doble inicio
+            }
             try {
+                // Re-crear el canvas para garantizar un contexto 2D limpio tras reinicios
+                try {
+                    const wrap = document.querySelector('.video-wrap');
+                    const old = document.getElementById('overlay');
+                    if (wrap && old) {
+                        const newCanvas = document.createElement('canvas');
+                        newCanvas.id = 'overlay';
+                        newCanvas.width = old.width;
+                        newCanvas.height = old.height;
+                        newCanvas.style.cssText = old.style.cssText;
+                        wrap.replaceChild(newCanvas, old);
+                        canvasEl = newCanvas;
+                        ctx = canvasEl.getContext('2d');
+                    }
+                } catch(_) {}
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         width: 640,
@@ -366,7 +412,7 @@
                 videoEl.addEventListener('loadedmetadata', resizeCanvasToVideo, { once: true });
                 running = true;
                 // Usar Camera helper para alimentar frames a MediaPipe Hands
-                if (!hands) await initHands();
+                await initHands(); // fuerza re-init cada vez para evitar estados zombie
                 cameraHelper = new window.Camera(videoEl, {
                     onFrame: async () => {
                         await hands.send({ image: videoEl });
@@ -377,25 +423,39 @@
                 cameraHelper.start();
                 // Mostrar HUD
                 document.getElementById('hud').style.display = 'block';
-                $('btnStartCam').disabled = true;
-                $('btnStopCam').disabled = false;
+                if ($('btnStartCam')) $('btnStartCam').disabled = true;
+                if ($('btnStopCam')) $('btnStopCam').disabled = false;
             } catch (err) {
                 console.error('Error al iniciar cámara:', err);
                 alert('No se pudo acceder a la cámara. Revisa permisos del navegador y que no esté en uso por otra app.');
             }
         }
-        function stopCamera() {
+        async function stopCamera() {
+            if (stopping) return;
+            stopping = true;
             running = false;
-            // Detener Camera helper y liberar recursos
-            try { cameraHelper && cameraHelper.stop && cameraHelper.stop(); } catch (_) {}
-            try { hands && hands.close && hands.close(); } catch (_) {}
+            // Detener Camera helper y liberar recursos de forma determinística
+            try { if (cameraHelper && cameraHelper.stop) await cameraHelper.stop(); } catch (_) {}
+            cameraHelper = null;
+            try { if (hands && hands.close) await hands.close(); } catch (_) {}
+            hands = null; // asegurar reinicialización limpia al volver a iniciar
+            // Abort pending prediction request if any
+            try { predictAbortController && predictAbortController.abort(); } catch (_) {}
+            predictAbortController = null;
+            predictInFlight = false;
+            // Reset locks/histeresis para próximo inicio
+            holdLetter = null; holdThr = 0; holdAt = 0;
+            lockLetter = null; lockThr = 0; lockUpdatedAt = 0; mismatchCount = 0;
             if (videoEl.srcObject) {
                 for (const t of videoEl.srcObject.getTracks()) t.stop();
                 videoEl.srcObject = null;
             }
+            // Limpiar canvas y ocultar HUD
+            try { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvasEl.width, canvasEl.height); } catch(_) {}
             document.getElementById('hud').style.display = 'none';
-            $('btnStartCam').disabled = false;
-            $('btnStopCam').disabled = true;
+            if ($('btnStartCam')) $('btnStartCam').disabled = false;
+            if ($('btnStopCam')) $('btnStopCam').disabled = true;
+            stopping = false;
         }
         function resizeCanvasToVideo() {
             const w = videoEl.videoWidth || 640;
@@ -489,30 +549,93 @@
             if (!predictInFlight && (now2 - lastPredictAt) >= PREDICT_COOLDOWN_MS) {
                 const lms0 = allHands[0];
                 const landmarks = lms0.map(p => ({ x: p.x, y: p.y, z: p.z }));
+                // Calcular feature vector en cliente para reducir payload y CPU del backend
+                const fv = extractFeatureVector(landmarks);
+                if (!fv) return; // si no hay feature válido, no predecir
                 predictInFlight = true;
+                // Nueva petición con abort controller para soportar reinicios
+                predictAbortController = new AbortController();
                 fetch(`${API_BASE}/predict`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ landmarks })
+                    body: JSON.stringify({ landmarks, feature: fv }),
+                    signal: predictAbortController.signal,
                 })
                 .then(r => r.json())
                 .then(data => {
                     lastPredictAt = performance.now();
                     if (!data || data.status !== 'ok') return;
-                    const L = data.letter || null;
-                    // Heurística de confianza a partir de distancia/umbral
-                    let conf = 0;
-                    if (typeof data.distance === 'number' && typeof data.threshold === 'number' && data.threshold > 0) {
-                        const ratio = Math.max(0, Math.min(1, data.distance / data.threshold));
-                        conf = 1 - ratio; // 1: muy confiable, 0: supera umbral
+                    const dist = typeof data.distance === 'number' ? data.distance : Infinity;
+                    const thr = typeof data.threshold === 'number' ? data.threshold : 0;
+                    const shapeOK = !!data.shape_ok;
+                    // Usa únicamente la letra aceptada por el backend (respetar umbral y forma)
+                    let L = data.letter || null;
+
+                    // Histeresis: si no pasó el umbral pero está cerca del último aceptado, mantener
+                    const nowH = performance.now();
+                    const within = (dist <= thr && thr > 0);
+                    if (within && L) {
+                        holdLetter = L; holdThr = thr; holdAt = nowH;
+                    } else if (!L && holdLetter && holdThr > 0) {
+                        // si seguimos cerca del gesto anterior, mantenerlo
+                        if (dist <= holdThr * RELAX_RATIO && (nowH - holdAt) <= 1000) {
+                            L = holdLetter;
+                        } else if ((nowH - holdAt) > HOLD_MS) {
+                            holdLetter = null; holdThr = 0;
+                        }
                     }
+
+                    // Confianza con mapeo más agresivo para subir rápido cuando el gesto es claro
+                    let conf = 0;
+                    if (thr > 0 && isFinite(dist)) {
+                        const ratio = Math.max(0, Math.min(1.25, dist / (holdLetter ? holdThr || thr : thr)));
+                        const gamma = 2.2; // curva que sube rápido cuando ratio<1
+                        conf = Math.max(0, Math.min(1, 1 - Math.pow(ratio, gamma))); // 1 cerca, 0 lejos
+                        // Si estamos dentro del umbral del backend, sube un mínimo para asegurar UI (>50%)
+                        if (dist <= thr) conf = Math.max(conf, 0.9);
+                        if (L && holdLetter === L) conf = Math.max(conf, 0.85); // mantener alta si seguimos en el gesto
+                    }
+                    // Si la forma estricta no coincide, la confianza no debe subir
+                    if (!shapeOK) {
+                        L = null; // forzar 'Procesando…'
+                        conf = 0;
+                    }
+
+                    // Bloqueo de gesto: fija letra y confianza mientras el gesto persista
+                    if (L && conf >= LOCK_CONF_THRESHOLD) {
+                        lockLetter = L;
+                        lockThr = thr * 0.9 || holdThr || lockThr;
+                        lockUpdatedAt = nowH;
+                        mismatchCount = 0;
+                    } else if (lockLetter) {
+                        // Si tenemos bloqueo, mantenlo salvo que haya evidencia sostenida de cambio
+                        const nearLocked = isFinite(dist) && lockThr > 0 && (dist <= lockThr * UNLOCK_RELAX_RATIO);
+                        if (nearLocked || (nowH - lockUpdatedAt) <= UNLOCK_GRACE_MS) {
+                            L = lockLetter;
+                            conf = Math.max(conf, 0.88); // mantener confianza alta mientras persista
+                            mismatchCount = 0;
+                        } else {
+                            mismatchCount++;
+                            if (mismatchCount >= CHANGE_CONFIRM_FRAMES) {
+                                // liberar bloqueo por cambio real de gesto
+                                lockLetter = null;
+                                lockThr = 0;
+                                mismatchCount = 0;
+                            } else {
+                                // durante conteo, seguimos mostrando la bloqueada
+                                L = lockLetter;
+                                conf = Math.max(conf, 0.8);
+                            }
+                        }
+                    }
+
                     smoothWindow.push(L);
                     if (smoothWindow.length > SMOOTH_SIZE) smoothWindow.shift();
                     const final = majority(smoothWindow);
-                    lastConf = (lastConf * 0.7) + (conf * 0.3);
+                    lastConf = (lastConf * 0.7) + (conf * 0.3); // más inercia para estabilidad
                     setPredicted(final, lastConf);
                 })
-                .catch(() => {})
+                .catch((e) => { /* abort o error de red */ })
                 .finally(() => { predictInFlight = false; });
             }
         }
@@ -558,39 +681,6 @@
             return feat;
         }
 
-        // ========== Bucle de video ==========
-        function loop(t) {
-            if (!running) return;
-            rafId = requestAnimationFrame(loop);
-            if (t - lastT < minIntervalMs) return;
-            lastT = t;
-
-            if (videoEl.readyState < 2) return;
-            const res = handLandmarker.detectForVideo(videoEl, performance.now());
-            const lms = res && res.landmarks && res.landmarks[0];
-            drawLandmarks(lms);
-
-            // Captura de muestras cuando está entrenando
-            if (isCapturing && lms) {
-                batch.push({ landmarks: lms });
-                if (batch.length >= BATCH_SIZE) {
-                    flushBatch();
-                }
-            }
-
-            // Predicción local si tenemos modelo
-            if (lms && model.centroids && Object.keys(model.centroids).length) {
-                const fv = extractFeatureVector(lms);
-                if (fv) {
-                    const pred = predictLetter(fv, model.centroids);
-                    smoothWindow.push(pred || null);
-                    if (smoothWindow.length > SMOOTH_SIZE) smoothWindow.shift();
-                    const final = majority(smoothWindow);
-                    setPredicted(final);
-                }
-            }
-        }
-
         function majority(arr) {
             const counts = {};
             for (const v of arr) { if (!v) continue; counts[v] = (counts[v] || 0) + 1; }
@@ -599,43 +689,19 @@
             return best;
         }
 
-        function l2(a, b) {
-            let s = 0;
-            const m = Math.min(a.length, b.length);
-            for (let i = 0; i < m; i++) { const d = (a[i] || 0) - (b[i] || 0); s += d * d; }
-            return Math.sqrt(s);
-        }
-        function predictLetterWithConfidence(fv, centroids) {
-            let best = null, bestD = Infinity, secondD = Infinity;
-            for (const L of Object.keys(centroids)) {
-                const d = l2(fv, centroids[L]);
-                if (d < bestD) { secondD = bestD; bestD = d; best = L; }
-                else if (d < secondD) { secondD = d; }
-            }
-            // Confianza: combinación de dos heurísticas para evitar 0 constante
-            // 1) Separación relativa (segundo - primero)
-            let confSep = 0;
-            if (isFinite(bestD) && isFinite(secondD)) {
-                const sep = Math.max(0, secondD - bestD);
-                confSep = Math.max(0, Math.min(1, sep / (secondD + 1e-6)));
-            }
-            // 2) Distancia absoluta al mejor (más cerca = mejor). k ajusta sensibilidad
-            const k = 3.0;
-            const confDist = isFinite(bestD) ? Math.exp(-bestD / k) : 0;
-            const conf = Math.max(confSep, confDist);
-            return { letter: best, conf };
-        }
-
         // ========== API ==========
         async function flushBatch() {
             if (!batch.length) return;
             const letter = $('letter').value;
             const payload = { letter, samples: batch.splice(0, batch.length) };
             // Fire-and-forget para no bloquear el render ni la detección
+            // Crear un AbortController para poder cancelar si el usuario detiene captura
+            batchAbortController = new AbortController();
             fetch(`${API_BASE}/samples/batch`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                signal: batchAbortController.signal,
             })
             .then(r => r.json())
             .then(data => {
@@ -686,21 +752,19 @@
         }
 
         // ========== Event handlers ==========
-        $('btnStartCam').addEventListener('click', async () => {
-            await startCamera();
-        });
-
-        $('btnStopCam').addEventListener('click', () => {
-            stopCamera();
-        });
 
         $('btnTrainSamples').addEventListener('click', async () => {
             if (!running) { $('statusMsg').textContent = 'Primero inicia la cámara.'; return; }
             if (isCapturing) {
+                // Parada inmediata: abortar cualquier envío en curso y limpiar el buffer
                 isCapturing = false;
-                await flushBatch();
-                await refreshProgress();
+                try { batchAbortController && batchAbortController.abort(); } catch(_) {}
+                batchAbortController = null;
+                batch.splice(0, batch.length);
+                lastFlushAt = performance.now();
                 $('btnTrainSamples').textContent = 'Entrenar (capturar muestras)';
+                $('statusMsg').textContent = 'Captura detenida';
+                await refreshProgress();
             } else {
                 // empieza captura
                 isCapturing = true;
@@ -781,6 +845,10 @@
             loadLatestModel().catch(()=>{});
             setProgressFromSession();
             refreshProgress();
+            // Auto-iniciar la cámara al cargar la página (solicitará permisos del navegador)
+            startCamera().catch(()=>{
+                document.getElementById('statusMsg').textContent = 'No se pudo iniciar la cámara automáticamente. Revisa permisos.';
+            });
         });
         window.addEventListener('resize', () => {
             if (running) resizeCanvasToVideo();

@@ -10,7 +10,7 @@ export const Card: React.FC<CardProps> = ({ padded = true, style, className, chi
       {...rest}
       className={["card", className].filter(Boolean).join(' ')}
       style={{
-        padding: padded ? 16 : 0,
+        padding: padded ? 12 : 0,
         borderRadius: 12,
         ...style,
       }}

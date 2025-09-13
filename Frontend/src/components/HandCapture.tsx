@@ -1,112 +1,169 @@
-import React, { useEffect, useRef } from 'react';
-import type { Landmark } from '../lib/api';
-import Webcam from 'react-webcam';
+import React, { useEffect, useRef, useState } from 'react'
+import type { Landmark } from '../lib/api'
 
-interface Props {
-  onLandmarks: (hands: Landmark[][]) => void;
-  width?: number;
-  height?: number;
-  cameraOn?: boolean;
-  mirror?: boolean;
+type Props = {
+  onLandmarks?: (hands: Landmark[][]) => void
+  cameraOn?: boolean
+  mirror?: boolean
 }
 
-export const HandCapture: React.FC<Props> = ({ onLandmarks, width = 640, height = 480, cameraOn = true, mirror = false }) => {
-  const webcamRef = useRef<Webcam | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const handsRef = useRef<any>(null);
+export default function HandCapture({ onLandmarks, cameraOn = true, mirror = true }: Props) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
+  const handsRef = useRef<any>(null)
+  const cameraRef = useRef<any>(null)
 
-  // init MediaPipe Hands once
+  const [mpReady, setMpReady] = useState(false)
+  // Ensure CDN scripts are present (drawing_utils, camera_utils, hands)
   useEffect(() => {
-    const canvas = canvasRef.current!;
-    canvas.width = width;
-    canvas.height = height;
-    ctxRef.current = canvas.getContext('2d');
-
-    const HandsCtor = (window as any).Hands;
-    if (!HandsCtor) {
-      console.error('MediaPipe Hands no está cargado');
-      return;
-    }
-    const hands = new HandsCtor({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}` });
-    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-    hands.onResults((results: any) => {
-      const canvas = canvasRef.current!;
-      const ctx = ctxRef.current;
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const handsLm: any[] = results.multiHandLandmarks || [];
-      const all: Landmark[][] = handsLm.map((lm) => lm.map((p: any) => ({ x: p.x, y: p.y, z: p.z })));
-      onLandmarks(all);
-      // draw both hands with distinct colors
-      const colors = ['#0FA958', '#2563eb'];
-      all.forEach((landmarks, idx) => {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = colors[idx % colors.length];
-        ctx.fillStyle = colors[idx % colors.length];
-        for (const p of landmarks) {
-          const x = p.x * canvas.width;
-          const y = p.y * canvas.height;
-          ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
-          ctx.fill();
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
+      'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js',
+      'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js',
+    ]
+    let mounted = true
+    const load = async () => {
+      for (const src of urls) {
+        if (![...document.scripts].some(s => s.src === src)) {
+          await new Promise<void>((resolve, reject) => {
+            const el = document.createElement('script')
+            el.src = src
+            el.crossOrigin = 'anonymous'
+            el.onload = () => resolve()
+            el.onerror = () => reject(new Error('Failed to load ' + src))
+            document.head.appendChild(el)
+          })
         }
-        const line = (a: Landmark, b: Landmark) => {
-          ctx.beginPath();
-          ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
-          ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
-          ctx.stroke();
-        };
-        for (let i = 1; i < 4; i++) line(landmarks[i], landmarks[i + 1]);
-        for (let i = 5; i < 8; i++) line(landmarks[i], landmarks[i + 1]);
-        for (let i = 9; i < 12; i++) line(landmarks[i], landmarks[i + 1]);
-        for (let i = 13; i < 16; i++) line(landmarks[i], landmarks[i + 1]);
-        for (let i = 17; i < 20; i++) line(landmarks[i], landmarks[i + 1]);
-      });
-    });
-    handsRef.current = hands;
-
-    return () => {
-      hands.close && hands.close();
-      handsRef.current = null;
-    };
-  }, [onLandmarks, width, height]);
-
-  // start/stop RAF loop based on cameraOn
-  useEffect(() => {
-    const loop = async () => {
-      const hands = handsRef.current;
-      const video = webcamRef.current?.video as HTMLVideoElement | undefined;
-      if (hands && video && video.readyState === 4) {
-        await hands.send({ image: video });
       }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-
-    if (cameraOn) {
-      rafRef.current = requestAnimationFrame(loop);
-    } else if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
+      if (!mounted) return
+      setMpReady(true)
     }
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-  }, [cameraOn]);
+    load().catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
-  const transform = mirror ? 'scaleX(-1)' : 'none';
+  // Init canvas ctx
+  useEffect(() => {
+    const c = canvasRef.current
+    if (!c) return
+    ctxRef.current = c.getContext('2d')
+  }, [])
+
+  // Start/Stop camera
+  useEffect(() => {
+    let stopped = false
+    const start = async () => {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      if (!video || !canvas) return
+      // Create hands
+      const base = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'
+      const Hands: any = (window as any).Hands
+      if (!Hands) return
+      const hands = new Hands({ locateFile: (file: string) => base + file })
+      hands.setOptions({
+        selfieMode: true,
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.3,
+        minTrackingConfidence: 0.3,
+      })
+      hands.onResults((res: any) => {
+        const ctx = ctxRef.current
+        if (!ctx || stopped) return
+        const w = canvas.width, h = canvas.height
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+        if (mirror) {
+          ctx.setTransform(-1, 0, 0, 1, w, 0)
+        }
+        const all = (res && res.multiHandLandmarks) ? res.multiHandLandmarks : []
+        const CONN = [
+          [0,1],[1,2],[2,3],[3,4],
+          [0,5],[5,6],[6,7],[7,8],
+          [0,9],[9,10],[10,11],[11,12],
+          [0,13],[13,14],[14,15],[15,16],
+          [0,17],[17,18],[18,19],[19,20]
+        ]
+        const drawConnectors = (window as any).drawConnectors
+        const drawLandmarks = (window as any).drawLandmarks
+        for (const lms of all) {
+          if (drawConnectors && drawLandmarks) {
+            drawConnectors(ctx, lms, CONN, { color: '#22d3ee', lineWidth: 4 })
+            drawLandmarks(ctx, lms, { color: '#f97316', lineWidth: 2, radius: 5 })
+          } else {
+            // basic draw
+            ctx.strokeStyle = '#22d3ee'
+            ctx.lineWidth = 3.5
+            ctx.beginPath()
+            for (const [a,b] of CONN as any) {
+              const ax = lms[a].x * w, ay = lms[a].y * h
+              const bx = lms[b].x * w, by = lms[b].y * h
+              ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+            }
+            ctx.stroke()
+            ctx.fillStyle = '#f97316'
+            for (const p of lms) { ctx.beginPath(); ctx.arc(p.x*w, p.y*h, 5, 0, Math.PI*2); ctx.fill() }
+          }
+        }
+        if (onLandmarks) {
+          const mapped: Landmark[][] = all.map((l: any) => l.map((p: any) => ({ x: p.x, y: p.y, z: p.z })))
+          onLandmarks(mapped)
+        }
+      })
+
+      handsRef.current = hands
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
+      video.srcObject = stream
+      await video.play()
+      // sync canvas size
+      const sync = () => {
+        const w = video.videoWidth || 640
+        const h = video.videoHeight || 480
+        canvas.width = w; canvas.height = h
+        // Ensure both video and canvas are exactly the same CSS size
+        const wp = w + 'px', hp = h + 'px'
+        canvas.style.width = wp
+        canvas.style.height = hp
+        ;(video as HTMLVideoElement).style.width = wp
+        ;(video as HTMLVideoElement).style.height = hp
+      }
+      if (video.readyState >= 1) sync(); else video.addEventListener('loadedmetadata', sync, { once: true })
+
+      const Camera = (window as any).Camera
+      cameraRef.current = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }) },
+        width: 640,
+        height: 480,
+      })
+      cameraRef.current.start()
+    }
+
+    const stop = async () => {
+      stopped = true
+      try { cameraRef.current && cameraRef.current.stop && await cameraRef.current.stop() } catch {}
+      cameraRef.current = null
+      try { handsRef.current && handsRef.current.close && await handsRef.current.close() } catch {}
+      handsRef.current = null
+      const video = videoRef.current as HTMLVideoElement | null
+      if (video && video.srcObject) {
+        for (const t of (video.srcObject as MediaStream).getTracks()) t.stop()
+        video.srcObject = null
+      }
+      const ctx = ctxRef.current, c = canvasRef.current
+      if (ctx && c) { ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height) }
+    }
+
+    if (cameraOn && mpReady) start(); else stop()
+    return () => { stop() }
+  }, [cameraOn, mirror, onLandmarks, mpReady])
+
   return (
-    <div style={{ position: 'relative', width, height, background: 'var(--muted-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-      {cameraOn ? (
-        <Webcam ref={webcamRef} audio={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform }} />
-      ) : (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--subtext)' }}>Cámara apagada</div>
-      )}
-      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', transform }} />
+    <div className="video-wrap">
+      <video ref={videoRef} playsInline muted autoPlay />
+      <canvas ref={canvasRef} width={640} height={480} />
     </div>
-  );
-};
-
-export default HandCapture;
+  )
+}

@@ -4,6 +4,7 @@ type Variant = 'primary' | 'danger' | 'ghost';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  fullWidth?: boolean;
 }
 
 const styles: Record<Variant, React.CSSProperties> = {
@@ -24,12 +25,14 @@ const styles: Record<Variant, React.CSSProperties> = {
   },
 };
 
-export const Button: React.FC<ButtonProps> = ({ variant = 'primary', style, children, ...rest }) => {
+export const Button: React.FC<ButtonProps> = ({ variant = 'primary', fullWidth = false, style, children, ...rest }) => {
   return (
     <button
       {...rest}
       style={{
         ...styles[variant],
+        display: fullWidth ? 'block' as const : undefined,
+        width: fullWidth ? '100%' : undefined,
         ...style,
       }}
     >

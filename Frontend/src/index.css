@@ -25,6 +25,48 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ===== THEME: Dark ===== */
+[data-theme="dark"] {
+  --bg: #0f172a;             /* slate-900 */
+  --text: #e5e7eb;           /* gray-200 */
+  --border: #334155;         /* slate-700 */
+  --surface: #111827;        /* gray-900 */
+  --muted-surface: #0b1220;  /* deep backdrop */
+
+  --primary: #0ea5e9;        /* sky-500 */
+  --primary-600: #0284c7;
+  --primary-700: #0369a1;
+  --accent: #22d3ee;         /* cyan-400 */
+  --danger: #ef4444;
+  --danger-600: #dc2626;
+  --code: #0b1220;
+
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ===== THEME: Neo (Espacial) ===== */
+[data-theme="neo"] {
+  --bg: #0b0f1a;             /* space dark */
+  --text: #dce3f2;           /* cold light */
+  --border: #1b2437;         /* deep blue border */
+  --surface: #0f1526;        /* panel */
+  --muted-surface: #0b1220;  /* alt */
+
+  --primary: #7c3aed;        /* violet-600 */
+  --primary-600: #6d28d9;
+  --primary-700: #5b21b6;
+  --accent: #22d3ee;         /* cyan-400 */
+  --danger: #ef4444;
+  --danger-600: #dc2626;
+  --code: #0b1220;
+
+  color: var(--text);
+  background: radial-gradient(1000px 600px at 15% 10%, rgba(124,58,237,0.18), transparent 60%),
+              radial-gradient(900px 540px at 85% 20%, rgba(34,211,238,0.12), transparent 60%),
+              var(--bg);
+}
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -88,4 +130,57 @@ button:focus-visible {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+/* ===== Animations & Transitions (shared) ===== */
+.fade-in {
+  animation: fadeIn 240ms ease-out both;
+}
+
+.scale-in {
+  animation: scaleIn 200ms ease-out both;
+}
+
+.slide-in-right {
+  animation: slideInRight 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.slide-in-up {
+  animation: slideInUp 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.shadow-hover {
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.shadow-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.14);
+}
+
+.soft-hover {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.soft-hover:hover {
+  background-color: #f6f8fa;
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }

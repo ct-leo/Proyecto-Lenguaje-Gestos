@@ -12,7 +12,7 @@ function App() {
   const [theme, setTheme] = useState<ThemeName>(() => getTheme());
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+    <div style={{ padding: 0, maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
       {theme === 'neo' && <NeoAmbient />}
       <header style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

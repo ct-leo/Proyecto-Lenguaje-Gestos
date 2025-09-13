@@ -73,12 +73,17 @@
   overflow: hidden;
   border: 1px solid var(--v2-border);
 }
-.v2-progress-bar > span {
+.v2-progress-bar>span {
   display: block;
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--v2-accent), #13d373);
+  background: linear-gradient(90deg, var(--v2-accent, #10b981), #13d373);
   transition: width .25s ease;
+}
+
+/* Explicit fill style to avoid theme variable issues */
+.v2-progress-fill {
+  background: #10b981 !important; /* solid green like demo */
 }
 
 .v2-confidence {
@@ -95,6 +100,29 @@
 }
 
 .v2-status { color: var(--v2-muted); min-height: 18px; }
+
+.video-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.video-wrap > video {
+  display: block;
+  border-radius: 10px;
+  background: #000;
+  position: relative;
+  z-index: 1;
+}
+
+.video-wrap > canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 2;
+  outline: 1px solid rgba(255, 255, 255, 0.06);
+}
 
 @media (max-width: 980px) {
   .v2-stage { grid-template-columns: 1fr; }

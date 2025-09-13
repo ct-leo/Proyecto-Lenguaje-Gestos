@@ -118,6 +118,39 @@
         .status.error {
             color: #dc3545;
         }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px 0 20px;
+        }
+        .toolbar .vowel-btn {
+            background-color: #6c757d;
+        }
+        .toolbar .sync-btn {
+            background-color: #17a2b8;
+        }
+        .live-card {
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+        }
+        .live-card .vowel {
+            font-size: 64px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            margin: 0 0 10px;
+            color: #343a40;
+        }
+        .live-card .meta {
+            color: #666;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -136,8 +169,21 @@
 
         <div class="controls">
             <button id="startBtn" onclick="startCamera()">Iniciar Cámara</button>
-            <button id="captureBtn" onclick="captureAndRecognize()" disabled>Capturar y Reconocer</button>
             <button id="stopBtn" onclick="stopCamera()" disabled>Detener Cámara</button>
+        </div>
+
+        <div class="toolbar">
+            <button class="vowel-btn" onclick="registerSample('A')" disabled id="btnA">Registrar A</button>
+            <button class="vowel-btn" onclick="registerSample('E')" disabled id="btnE">Registrar E</button>
+            <button class="vowel-btn" onclick="registerSample('I')" disabled id="btnI">Registrar I</button>
+            <button class="vowel-btn" onclick="registerSample('O')" disabled id="btnO">Registrar O</button>
+            <button class="vowel-btn" onclick="registerSample('U')" disabled id="btnU">Registrar U</button>
+            <button class="sync-btn" onclick="syncDataset()" id="btnSync">Sincronizar</button>
+        </div>
+
+        <div class="live-card" id="liveCard" style="display:none;">
+            <div class="vowel" id="liveVowel">-</div>
+            <div class="meta" id="liveMeta">Sin datos entrenados</div>
         </div>
 
         <div id="result" class="result" style="display: none;"></div>
@@ -152,116 +198,151 @@
         </div>
     </div>
 
-    <!-- Cargar Mediapipe desde CDN -->
-    <script type="module">
-        import { Hands } from 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js';
-        import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1646424915/camera_utils.js';
-        import { drawConnectors, drawLandmarks } from 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js';
+    <!-- Cargar Mediapipe (legacy) desde CDN como scripts globales -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
+    <!-- Script principal -->
+    <script>
         // Variables globales
         let stream = null;
         let hands = null;
         let camera = null;
+        let lastLandmarks = null; // últimos landmarks detectados
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const resultDiv = document.getElementById('result');
         const startBtn = document.getElementById('startBtn');
-        const captureBtn = document.getElementById('captureBtn');
         const stopBtn = document.getElementById('stopBtn');
         const statusDiv = document.getElementById('mediapipeStatus');
+        const liveCard = document.getElementById('liveCard');
+        const liveVowel = document.getElementById('liveVowel');
+        const liveMeta = document.getElementById('liveMeta');
+        const vowelButtons = ['btnA','btnE','btnI','btnO','btnU'].map(id=>document.getElementById(id));
 
-        // Función para detectar gesto vocal
-        function detectarGestoVocal(landmarks) {
+        // ====== Utilidades de almacenamiento (localStorage) ======
+        const LS_KEY = 'localStorageVista01';
+        function loadDataset() {
             try {
-                // Extraer coordenadas de puntos clave
-                const thumb_tip = landmarks[4];
-                const thumb_ip = landmarks[3];
-                const thumb_mcp = landmarks[2];
-                
-                const index_tip = landmarks[8];
-                const index_pip = landmarks[6];
-                const index_mcp = landmarks[5];
-                
-                const middle_tip = landmarks[12];
-                const middle_pip = landmarks[10];
-                const middle_mcp = landmarks[9];
-                
-                const ring_tip = landmarks[16];
-                const ring_pip = landmarks[14];
-                const ring_mcp = landmarks[13];
-                
-                const pinky_tip = landmarks[20];
-                const pinky_pip = landmarks[18];
-                const pinky_mcp = landmarks[17];
-                
-                // Función auxiliar para calcular si un dedo está extendido
-                function dedoExtendido(tip, pip, mcp) {
-                    return tip.y < pip.y && pip.y < mcp.y;
-                }
-                
-                // Función auxiliar para calcular si un dedo está doblado
-                function dedoDoblado(tip, pip, mcp) {
-                    return tip.y > pip.y && pip.y > mcp.y;
-                }
-                
-                // Detectar gestos específicos para cada vocal
-                
-                // A - Mano cerrada con pulgar extendido
-                if (dedoExtendido(thumb_tip, thumb_ip, thumb_mcp) &&
-                    dedoDoblado(index_tip, index_pip, index_mcp) &&
-                    dedoDoblado(middle_tip, middle_pip, middle_mcp) &&
-                    dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
-                    dedoDoblado(pinky_tip, pinky_pip, pinky_mcp)) {
-                    return 'A', 0.9;
-                }
-                
-                // E - Todos los dedos extendidos
-                else if (dedoExtendido(thumb_tip, thumb_ip, thumb_mcp) &&
-                          dedoExtendido(index_tip, index_pip, index_mcp) &&
-                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
-                          dedoExtendido(ring_tip, ring_pip, ring_mcp) &&
-                          dedoExtendido(pinky_tip, pinky_pip, pinky_mcp)) {
-                    return 'E', 0.9;
-                }
-                
-                // I - Solo índice y medio extendidos
-                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
-                          dedoExtendido(index_tip, index_pip, index_mcp) &&
-                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
-                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
-                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp)) {
-                    return 'I', 0.8;
-                }
-                
-                // O - Mano cerrada en forma de círculo
-                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
-                          dedoDoblado(index_tip, index_pip, index_mcp) &&
-                          dedoDoblado(middle_tip, middle_pip, middle_mcp) &&
-                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
-                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp) &&
-                          Math.abs(thumb_tip.x - index_tip.x) < 0.1) {
-                    return 'O', 0.8;
-                }
-                
-                // U - Índice y medio juntos, otros doblados
-                else if (dedoDoblado(thumb_tip, thumb_ip, thumb_mcp) &&
-                          dedoExtendido(index_tip, index_pip, index_mcp) &&
-                          dedoExtendido(middle_tip, middle_pip, middle_mcp) &&
-                          dedoDoblado(ring_tip, ring_pip, ring_mcp) &&
-                          dedoDoblado(pinky_tip, pinky_pip, pinky_mcp) &&
-                          Math.abs(index_tip.x - middle_tip.x) < 0.05) {
-                    return 'U', 0.8;
-                }
-                
-                else {
-                    return null, 0.0;
-                }
-                    
-            } catch (error) {
-                console.error('Error en detección de gesto:', error);
-                return null, 0.0;
+                const raw = localStorage.getItem(LS_KEY);
+                if (!raw) return {samples: {A: [], E: [], I: [], O: [], U: []}, centroids: {}, thresholds: {}};
+                const obj = JSON.parse(raw);
+                obj.samples = obj.samples || {A: [], E: [], I: [], O: [], U: []};
+                obj.centroids = obj.centroids || {};
+                obj.thresholds = obj.thresholds || {};
+                return obj;
+            } catch {
+                return {samples: {A: [], E: [], I: [], O: [], U: []}, centroids: {}, thresholds: {}};
             }
+        }
+        function saveDataset(ds) {
+            localStorage.setItem(LS_KEY, JSON.stringify(ds));
+        }
+        let DATASET = loadDataset();
+
+        // ====== Lógica de features y modelo (migrada de vista02 y adaptada a JS) ======
+        function _dist(a, b) {
+            const dx = a[0]-b[0], dy = a[1]-b[1], dz = a[2]-b[2];
+            return Math.sqrt(dx*dx + dy*dy + dz*dz);
+        }
+        function extract_feature_vector(landmarks) {
+            const pts = landmarks.map(p=>[Number(p.x||0), Number(p.y||0), Number(p.z||0)]);
+            if (pts.length !== 21) throw new Error('expected 21 landmarks');
+            const wrist = pts[0];
+            const pts_rel = pts.map(p=>[p[0]-wrist[0], p[1]-wrist[1], p[2]-wrist[2]]);
+            const middle_mcp = pts_rel[9];
+            const base = _dist([0,0,0], middle_mcp);
+            const mcp_points = [pts_rel[5], pts_rel[9], pts_rel[13], pts_rel[17]];
+            const spread = ( _dist(mcp_points[0], mcp_points[1]) + _dist(mcp_points[1], mcp_points[2]) + _dist(mcp_points[2], mcp_points[3]) )/3.0;
+            const scale = Math.max(1e-6, base + spread);
+            const pts_n = pts_rel.map(p=>[p[0]/scale, p[1]/scale, p[2]/scale]);
+            const fingers = { thumb:[2,3,4], index:[5,6,8], middle:[9,10,12], ring:[13,14,16], pinky:[17,18,20] };
+            const feat = [];
+            for (const [mcp_i, pip_i, tip_i] of Object.values(fingers)) {
+                const tip = pts_n[tip_i], pip = pts_n[pip_i], mcp = pts_n[mcp_i];
+                feat.push(_dist(tip, pip));
+                feat.push(_dist(pip, mcp));
+            }
+            const tipIdx = [8,12,16,20];
+            for (let i=0;i<tipIdx.length-1;i++) {
+                feat.push(_dist(pts_n[tipIdx[i]], pts_n[tipIdx[i+1]]));
+            }
+            const zs = pts_n.map(p=>p[2]);
+            const meanZ = zs.reduce((a,b)=>a+b,0)/zs.length;
+            const varZ = zs.reduce((a,z)=>a+(z-meanZ)*(z-meanZ),0)/zs.length;
+            feat.push(varZ);
+            return feat;
+        }
+        function _l2(a,b){
+            const m = Math.min(a.length,b.length); let s=0; for(let i=0;i<m;i++){const d=(+a[i])-(+b[i]); s+=d*d;} return Math.sqrt(s);
+        }
+        function compute_centroids(byLetter){
+            const centroids={};
+            for (const [L, vecs] of Object.entries(byLetter)){
+                if (!vecs || !vecs.length) continue;
+                const m = vecs[0].length; const acc = new Array(m).fill(0);
+                for (const v of vecs){ for (let i=0;i<m;i++) acc[i]+=Number(v[i]||0); }
+                centroids[L] = acc.map(x=>x/vecs.length);
+            }
+            return centroids;
+        }
+        function compute_thresholds(byLetter, centroids, k_std=2.0){
+            const thresholds={}; const MIN_THRESH=0.25;
+            for (const [L, vecs] of Object.entries(byLetter)){
+                const c = centroids[L]; if (!c || !vecs || !vecs.length) continue;
+                const ds = vecs.map(v=>_l2(v,c)); if (!ds.length) continue;
+                const mean = ds.reduce((a,b)=>a+b,0)/ds.length;
+                const variance = ds.reduce((a,d)=>a+(d-mean)*(d-mean),0)/ds.length;
+                const std = Math.sqrt(variance);
+                thresholds[L] = Math.max(MIN_THRESH, mean + k_std*std);
+            }
+            return thresholds;
+        }
+        function predict_with_thresholds(fv, centroids, thresholds){
+            let best=null, bestD=Infinity, bestThr=0;
+            for (const [L, c] of Object.entries(centroids)){
+                const d = _l2(fv,c); if (d<bestD){ bestD=d; best=L; bestThr = thresholds[L]||0; }
+            }
+            if (best===null) return {letter:null, distance:Infinity, threshold:0};
+            if (bestD <= bestThr && bestThr>0) return {letter:best, distance:bestD, threshold:bestThr};
+            return {letter:null, distance:bestD, threshold:bestThr};
+        }
+
+        function rebuildModelFromDataset(){
+            const byL = DATASET.samples;
+            const centroids = compute_centroids(byL);
+            const thresholds = compute_thresholds(byL, centroids);
+            DATASET.centroids = centroids;
+            DATASET.thresholds = thresholds;
+            saveDataset(DATASET);
+        }
+
+        // Registrar muestra con la vocal actual
+        window.registerSample = function(letter){
+            if (!lastLandmarks){
+                showResult('No hay mano capturada aún. Mantén la mano en cámara.', 'error');
+                return;
+            }
+            try{
+                const fv = extract_feature_vector(lastLandmarks);
+                DATASET.samples[letter] = DATASET.samples[letter] || [];
+                DATASET.samples[letter].push(fv);
+                rebuildModelFromDataset();
+                showResult(`Muestra registrada para "${letter}". Total: ${DATASET.samples[letter].length}`, 'success');
+                console.log('[Vista01] Muestra añadida', {letter, fvLength: fv.length});
+            }catch(err){
+                console.error(err);
+                showResult('Error al registrar muestra: '+err.message, 'error');
+            }
+        }
+
+        // Sincronizar (imprimir en consola)
+        window.syncDataset = function(){
+            const ds = loadDataset();
+            console.log('localStorageVista01:', ds);
+            showResult('Dataset impreso en consola.', 'success');
         }
 
         // Inicializar Mediapipe Hands
@@ -272,7 +353,8 @@
 
                 hands = new Hands({
                     locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+                        // Usar base sin versionar para evitar 404 en CDN
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
                     }
                 });
 
@@ -287,6 +369,9 @@
 
                 statusDiv.textContent = 'Mediapipe listo';
                 statusDiv.className = 'status ready';
+                // Habilitar botones de registro al estar lista la cámara/librería
+                vowelButtons.forEach(b=>b.disabled=false);
+                liveCard.style.display = 'block';
                 
             } catch (error) {
                 console.error('Error inicializando Mediapipe:', error);
@@ -307,9 +392,33 @@
                     drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                     drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
                 }
+                lastLandmarks = results.multiHandLandmarks[0];
+                updateLivePrediction();
             }
             
             ctx.restore();
+        }
+
+        function updateLivePrediction(){
+            try{
+                if (!lastLandmarks) { liveVowel.textContent='-'; liveMeta.textContent='Sin mano detectada'; return; }
+                if (!DATASET.centroids || Object.keys(DATASET.centroids).length===0) { 
+                    liveVowel.textContent = '-';
+                    liveMeta.textContent = 'Sin datos entrenados';
+                    return;
+                }
+                const fv = extract_feature_vector(lastLandmarks);
+                const pred = predict_with_thresholds(fv, DATASET.centroids, DATASET.thresholds);
+                liveVowel.textContent = pred.letter ? pred.letter : '-';
+                if (pred.letter){
+                    const conf = (pred.threshold>0) ? Math.max(0, 1 - (pred.distance/pred.threshold)) : 0;
+                    liveMeta.textContent = `dist=${pred.distance.toFixed(3)} | thr=${pred.threshold.toFixed(3)} | conf~${(conf*100).toFixed(1)}%`;
+                } else {
+                    liveMeta.textContent = `No aceptado | dist=${pred.distance.toFixed(3)} thr=${pred.threshold.toFixed(3)}`;
+                }
+            }catch(err){
+                console.error('updateLivePrediction error', err);
+            }
         }
 
         // Función para iniciar la cámara
@@ -343,7 +452,6 @@
                 camera.start();
                 
                 startBtn.disabled = true;
-                captureBtn.disabled = false;
                 stopBtn.disabled = false;
                 
                 showResult('Cámara iniciada correctamente', 'success');
@@ -365,96 +473,9 @@
                 }
                 
                 startBtn.disabled = false;
-                captureBtn.disabled = true;
                 stopBtn.disabled = true;
                 
                 showResult('Cámara detenida', 'success');
-            }
-        }
-
-        // Función para capturar y reconocer
-        async function captureAndRecognize() {
-            if (!stream || !hands) {
-                showResult('Primero inicia la cámara y espera a que Mediapipe esté listo', 'error');
-                return;
-            }
-
-            showResult('Procesando imagen...', 'loading');
-            
-            try {
-                // Capturar frame del video
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = video.videoWidth;
-                tempCanvas.height = video.videoHeight;
-                tempCtx.drawImage(video, 0, 0);
-                
-                // Convertir a base64
-                const imageData = tempCanvas.toDataURL('image/jpeg', 0.8);
-                
-                // Procesar con Mediapipe
-                const results = await hands.process({image: video});
-                
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const landmarks = results.multiHandLandmarks[0];
-                    
-                    // Detectar gesto vocal
-                    const [letraDetectada, confianza] = detectarGestoVocal(landmarks);
-                    
-                    if (letraDetectada) {
-                        // Extraer coordenadas de la mano
-                        const coordenadasMano = landmarks.map(landmark => ({
-                            x: landmark.x,
-                            y: landmark.y,
-                            z: landmark.z
-                        }));
-                        
-                        // Enviar resultado al backend
-                        await guardarResultado(imageData, letraDetectada, confianza, coordenadasMano);
-                        
-                    } else {
-                        showResult('No se pudo reconocer un gesto vocal válido (A, E, I, O, U)', 'error');
-                    }
-                } else {
-                    showResult('No se detectó ninguna mano en la imagen', 'error');
-                }
-                
-            } catch (error) {
-                console.error('Error en reconocimiento:', error);
-                showResult('Error al procesar la imagen: ' + error.message, 'error');
-            }
-        }
-
-        // Función para guardar resultado en el backend
-        async function guardarResultado(imagenBase64, letraDetectada, confianza, coordenadasMano) {
-            try {
-                const response = await fetch('/vista01/guardar-resultado/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        imagen: imagenBase64,
-                        letra_detectada: letraDetectada,
-                        confianza: confianza,
-                        coordenadas_mano: coordenadasMano
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.estado === 'exito') {
-                    showResult(
-                        `✅ Letra detectada: <strong>${data.letra_detectada}</strong><br>
-                         Confianza: ${(data.confianza * 100).toFixed(1)}%<br>
-                         ${data.mensaje}`, 
-                        'success'
-                    );
-                } else {
-                    showResult(`❌ Error: ${data.mensaje}`, 'error');
-                }
-            } catch (error) {
-                showResult(`❌ Error de conexión: ${error.message}`, 'error');
             }
         }
 
@@ -468,7 +489,9 @@
         // Hacer funciones globales
         window.startCamera = startCamera;
         window.stopCamera = stopCamera;
-        window.captureAndRecognize = captureAndRecognize;
+        // Exponer utilidades
+        window.startCamera = startCamera;
+        window.stopCamera = stopCamera;
 
         // Inicializar Mediapipe al cargar la página
         initializeMediapipe();

@@ -249,10 +249,49 @@ Vista02 implementa un entrenamiento y reconocimiento de gestos del alfabeto de s
 ## Instalación y ejecución
 ```bash
 pip install -r requirements.txt
+python manage.py makemigrations
 python manage.py migrate
 python manage.py runserver
 ```
 - Demo: `http://127.0.0.1:8000/vista02/demo/`
+
+### Guía rápida de ejecución (Vista02)
+
+1) Backend (Windows, con entorno virtual)
+
+- Abrir terminal en la carpeta del backend:
+  - `cd Backend`
+- Crear entorno virtual (usa tu Python por defecto):
+  - `python -m venv env`
+- Activar entorno virtual:
+  - `env\Scripts\activate`
+- Instalar dependencias y preparar BD:
+  - `pip install -r requirements.txt`
+  - `python manage.py makemigrations`
+  - `python manage.py migrate`
+- Ejecutar el servidor de desarrollo:
+  - `python manage.py runserver`
+
+2) Frontend (Vite + React)
+
+- Abrir otra terminal en la carpeta del frontend:
+  - `cd Frontend`
+- Instalar dependencias:
+  - `npm i`
+- Iniciar el servidor de desarrollo:
+  - `npm run dev`
+
+3) Configuración de API en el Frontend (desarrollo)
+
+- El archivo `Frontend/vite.config.ts` ya trae un proxy que reenvía `/vista02/api` → `http://127.0.0.1:8000`.
+- En `Frontend/.env` asegúrate de usar:
+  - `VITE_API_BASE=/vista02/api`
+- De esta forma evitas CORS en desarrollo y las llamadas del frontend se rutean al backend por el proxy de Vite.
+
+4) Abrir en el navegador
+
+- Frontend (Vite): muestra la app de React.
+- Backend demo HTML puro (opcional): `http://127.0.0.1:8000/vista02/demo/`
 
 ### Instalación con y sin entorno virtual (Windows)
 
@@ -271,6 +310,7 @@ python -m venv env
 3. Instalar dependencias y preparar la BD:
 ```powershell
 pip install -r requirements.txt
+python manage.py makemigrations
 python manage.py migrate
 ```
 4. Ejecutar el servidor de desarrollo:
