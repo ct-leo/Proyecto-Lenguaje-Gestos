@@ -89,10 +89,8 @@ const Vista2: React.FC = () => {
     for (const L of letters) init[L] = 0;
     return init;
   });
-  // smoothing prediction confidence
-  const smoothWindow = useRef<number[]>([]);
   const SMOOTH_SIZE = 2;      // respuesta aún más rápida (vigilar parpadeo)
-  const PREDICT_COOLDOWN_MS = 60; // mayor fluidez
+  const PREDICT_COOLDOWN_MS = 75; // menor carga y más estable
   const lastPredictAtRef = useRef<number>(0);
   const predictLoopRef = useRef<number | null>(null);
   const predictInFlightRef = useRef<boolean>(false);
@@ -281,13 +279,13 @@ const Vista2: React.FC = () => {
     }
   }, [dynamicMode]);
 
-  const refreshLast = useCallback(async () => {
-    try {
-      await api.lastDetected();
-    } catch {
-      // noop
-    }
-  }, [dynamicMode]);
+  // const refreshLast = useCallback(async () => {
+  //   try {
+  //     await api.lastDetected();
+  //   } catch {
+  //     // noop
+  //   }
+  // }, [dynamicMode]);
 
   // captureOnce no longer needed; batching occurs in onLandmarks
 
@@ -319,10 +317,11 @@ const Vista2: React.FC = () => {
     }
   }, [refreshModel, refreshProgress]);
 
+  const lastHandIdxRef = useRef<number>(0);
   const predictOnce = useCallback(async () => {
     if (predictInFlightRef.current) return;
-    const lms = lastHandsRef.current?.[0];
-    if (!lms || lms.length !== 21) {
+    const handsArr = Array.isArray(lastHandsRef.current) ? lastHandsRef.current : [];
+    if (!handsArr.length || !Array.isArray(handsArr[0]) || handsArr[0].length !== 21) {
       // No hay landmarks válidos: decaimiento y limpiar letra
       holdLetterRef.current = null; holdThrRef.current = 0; holdAtRef.current = 0;
       lockLetterRef.current = null; lockThrRef.current = 0; mismatchCountRef.current = 0;
@@ -336,12 +335,23 @@ const Vista2: React.FC = () => {
       return;
     }
     predictInFlightRef.current = true;
-    // Registrar Y del tip (8) también aquí para asegurar historial aunque onLandmarks se retrase
-    const y8pred = typeof lms[8]?.y === 'number' ? Number(lms[8].y) : null;
-    const x8pred = typeof lms[8]?.x === 'number' ? Number(lms[8].x) : null;
-    if (y8pred != null && isFinite(y8pred)) { l8yHistRef.current.push(y8pred); if (l8yHistRef.current.length > DYN_WINDOW) l8yHistRef.current.shift(); }
-    if (x8pred != null && isFinite(x8pred)) { l8xHistRef.current.push(x8pred); if (l8xHistRef.current.length > DYN_WINDOW) l8xHistRef.current.shift(); }
     const dynFlag = !!dynamicRef.current;
+    // Selección ligera: elegir 1 mano por frame por área de bbox con "stickiness" para evitar saltos
+    const evalHands = handsArr.slice(0, 2);
+    const areas = evalHands.map((h) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const p of h as any) { const x = p.x, y = p.y; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      const w = Math.max(1e-6, maxX - minX), hgt = Math.max(1e-6, maxY - minY); return w * hgt;
+    });
+    let pick = 0;
+    if (evalHands.length === 2) {
+      // preferir la mano previamente elegida si su área no es notablemente menor (histeresis 15%)
+      const prev = Math.min(lastHandIdxRef.current, evalHands.length - 1);
+      const other = prev === 0 ? 1 : 0;
+      if (areas[prev] >= areas[other] * 0.85) pick = prev; else pick = other;
+    }
+    lastHandIdxRef.current = pick;
+    const lms = evalHands[pick];
     const resp = await api.predict(lms, { dynamic: dynFlag });
     if ((resp as any).status === 'ok') {
       let L: string | null = (resp as any).letter ?? null;
@@ -351,6 +361,11 @@ const Vista2: React.FC = () => {
       const cand: string | null = (resp as any).candidate ?? null;
       const candDist: number | null = (resp as any).candidate_distance ?? null;
       const acceptedDyn: boolean = !!(resp as any).accepted_dynamic;
+      // Registrar Y/X del tip (8) de la mano elegida
+      const y8pred = typeof lms[8]?.y === 'number' ? Number(lms[8].y) : null;
+      const x8pred = typeof lms[8]?.x === 'number' ? Number(lms[8].x) : null;
+      if (y8pred != null && isFinite(y8pred)) { l8yHistRef.current.push(y8pred); if (l8yHistRef.current.length > DYN_WINDOW) l8yHistRef.current.shift(); }
+      if (x8pred != null && isFinite(x8pred)) { l8xHistRef.current.push(x8pred); if (l8xHistRef.current.length > DYN_WINDOW) l8xHistRef.current.shift(); }
       // Debug básico siempre (estado backend)
       setDynDebug(`dyn=${dynFlag} accDyn=${acceptedDyn} | cand=${cand ?? '–'} cDist=${isFinite(candDist as number)?Number(candDist).toFixed(3):'–'} dist=${isFinite(dist)?dist.toFixed(3):'∞'} thr=${thr?thr.toFixed(3):'–'} L=${L ?? '∅'}`);
 
@@ -487,10 +502,7 @@ const Vista2: React.FC = () => {
         // Regla previa específica para Z: si no hay movimiento fuerte, no permitir que Z suba confianza
         // ni se fije por mayoría/bloqueo. Esto evita que Z aparezca en quietud aunque esté cerca del umbral.
         {
-          const DYN_LETTERS = new Set(['J','Ñ','Z']);
           const isZInvolved = (cand === 'Z') || (L === 'Z') || (final === 'Z');
-          const nearThrDyn = (thr > 0) && ((isFinite(dist) && dist <= thr * 1.60) || (candDist != null && isFinite(candDist) && candDist <= thr * 1.60));
-          const backendHintsDynZ = ((cand === 'Z') || (L === 'Z') || (resp as any).accepted_dynamic === true);
           if (isZInvolved && !strongMove) {
             // En quietud, mantén confianza baja y evita fijar Z.
             if (final === 'Z') final = null;
@@ -500,9 +512,7 @@ const Vista2: React.FC = () => {
         }
 
         // Regla 1: si hay suficiente evidencia de forma y confianza, usar mayoría/bloqueo
-        let acceptedByWindow = false;
         if (avgConf >= DYN_MIN_AVG_CONF && shapeFrac >= DYN_MIN_SHAPE_OK_FRAC) {
-          acceptedByWindow = true;
           if (!final) final = lockLetterRef.current;
         }
 

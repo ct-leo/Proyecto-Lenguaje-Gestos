@@ -64,7 +64,7 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
       const hands = new Hands({ locateFile: (file: string) => base + file })
       hands.setOptions({
         selfieMode: true,
-        maxNumHands: 1,            // reducir carga
+        maxNumHands: 2,            // permitir ambas manos
         modelComplexity: 0,        // modo rápido
         minDetectionConfidence: 0.3,
         minTrackingConfidence: 0.3,
@@ -86,27 +86,55 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
           [0,13],[13,14],[14,15],[15,16],
           [0,17],[17,18],[18,19],[19,20]
         ]
-        const drawConnectors = (window as any).drawConnectors
-        const drawLandmarks = (window as any).drawLandmarks
+        // handedness info para colorear por mano (Right azul, Left rojo)
+        const handed = (res && (res.multiHandedness || res.multiHandednesses)) ? (res.multiHandedness || res.multiHandednesses) : []
         // Dibuja puntos intermedios a lo largo de cada conexión para mayor detalle visual
         // Micro puntos removidos para mejorar rendimiento
-        for (const lms of all) {
-          if (drawConnectors && drawLandmarks) {
-            drawConnectors(ctx, lms, CONN, { color: '#22d3ee', lineWidth: 1.5 })
-            drawLandmarks(ctx, lms, { color: '#f97316', lineWidth: 1, radius: 1.8 })
-          } else {
-            // basic draw
-            ctx.strokeStyle = '#22d3ee'
-            ctx.lineWidth = 1.5
-            ctx.beginPath()
-            for (const [a,b] of CONN as any) {
-              const ax = lms[a].x * w, ay = lms[a].y * h
-              const bx = lms[b].x * w, by = lms[b].y * h
-              ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+        // Precompute adjacency for adaptive radius
+        const adj: Record<number, number[]> = (() => {
+          const m: Record<number, number[]> = {}; for (const [a,b] of CONN as any) { (m[a]=m[a]||[]).push(b); (m[b]=m[b]||[]).push(a);} return m;
+        })();
+        for (let idx = 0; idx < all.length; idx++) {
+          const lms = all[idx]
+          const label = String(handed?.[idx]?.label || '').toLowerCase();
+          const isRight = label === 'right';
+          // Colores por mano: derecha azul, izquierda roja
+          const connColor = isRight ? '#2563eb' : '#dc2626';
+          const ptColor = isRight ? '#3b82f6' : '#ef4444';
+          // Depth-aware order: draw farther first, nearer last
+          const connSorted = (CONN as any).slice().sort((c1: any, c2: any) => {
+            const z1 = ((lms[c1[0]].z ?? 0) + (lms[c1[1]].z ?? 0)) / 2;
+            const z2 = ((lms[c2[0]].z ?? 0) + (lms[c2[1]].z ?? 0)) / 2;
+            return z2 - z1; // mayor z primero (más lejos), menor z al final (más cerca)
+          });
+          // Draw connectors manually to control order
+          ctx.strokeStyle = connColor;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          for (const [a,b] of connSorted) {
+            const ax = lms[a].x * w, ay = lms[a].y * h
+            const bx = lms[b].x * w, by = lms[b].y * h
+            ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
+          }
+          ctx.stroke();
+          // Points: sort by z so nearer points draw last
+          const order = lms.map((p: any, i: number) => ({ i, z: p.z ?? 0 })).sort((A: any, B: any) => B.z - A.z);
+          ctx.fillStyle = ptColor;
+          for (const { i } of order) {
+            const p = lms[i]; const px = p.x * w, py = p.y * h;
+            // Adaptive radius: shrink when very close to neighbors
+            let r = 1.8;
+            const ns = adj[i] || [];
+            let minD = Infinity;
+            for (const j of ns) {
+              const q = lms[j]; const qx = q.x * w, qy = q.y * h;
+              const dx = px - qx, dy = py - qy; const d = Math.hypot(dx, dy);
+              if (d < minD) minD = d;
             }
-            ctx.stroke()
-            ctx.fillStyle = '#f97316'
-            for (const p of lms) { ctx.beginPath(); ctx.arc(p.x*w, p.y*h, 1.8, 0, Math.PI*2); ctx.fill() }
+            if (isFinite(minD)) {
+              if (minD < 8) r = 1.0; else if (minD < 12) r = 1.4;
+            }
+            ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
           }
         }
         if (onLandmarks) {
@@ -117,7 +145,7 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
 
       handsRef.current = hands
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user', frameRate: { ideal: 30, max: 30 } }, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user', frameRate: { ideal: 24, max: 24 } }, audio: false })
       video.srcObject = stream
       await video.play()
       // sync canvas size
