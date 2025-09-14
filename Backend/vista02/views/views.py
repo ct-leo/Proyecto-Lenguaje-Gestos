@@ -1,3 +1,31 @@
+_MODEL_CACHE: dict | None = None  # {'id':int,'centroids':dict,'thresholds':dict,'letters':list,'feature_version':str}
+
+def _load_latest_model_from_db():
+    model = TrainingModel.objects.order_by("-created_at").only(
+        "id", "feature_version", "centroids", "letters", "thresholds", "created_at"
+    ).first()
+    if not model:
+        return None
+    return {
+        "id": model.id,
+        "feature_version": model.feature_version,
+        "centroids": model.centroids,
+        "letters": model.letters,
+        "thresholds": getattr(model, 'thresholds', {}) or {},
+        "created_at": model.created_at,
+    }
+
+def _get_cached_model():
+    global _MODEL_CACHE
+    if _MODEL_CACHE is None:
+        _MODEL_CACHE = _load_latest_model_from_db()
+    return _MODEL_CACHE
+
+def _invalidate_model_cache():
+    global _MODEL_CACHE
+    _MODEL_CACHE = None
+"""Views for vista02 with lightweight in-process cache for the latest TrainingModel."""
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -31,8 +59,10 @@ def samples_batch(request):
     except Exception:
         return JsonResponse({"status": "error", "message": "JSON inválido"}, status=400)
 
+    import re
     letter = str(payload.get("letter", "")).upper()
-    if len(letter) != 1 or not ("A" <= letter <= "Z"):
+    # Aceptar letras estáticas A..Z y Ñ (ampliable si añaden más)
+    if not re.match(r"^[A-ZÑ]$", letter):
         return JsonResponse({"status": "error", "message": "Letra inválida"}, status=400)
 
     samples = payload.get("samples", [])
@@ -101,7 +131,7 @@ def train_model(request):
         threshold_method="percentile",
         threshold_param=0.88,
     )
-
+    _invalidate_model_cache()
     return JsonResponse({
         "status": "ok",
         "model_id": model.id,
@@ -124,19 +154,19 @@ def progress(request):
 @require_http_methods(["GET"])
 def get_model(request):
     """Devuelve el último modelo entrenado."""
-    model = TrainingModel.objects.order_by("-created_at").first()
-    if not model:
+    model_cached = _get_cached_model()
+    if not model_cached:
         return JsonResponse({"status": "error", "message": "Modelo no encontrado"}, status=404)
     return JsonResponse({
         "status": "ok",
-        "model_id": model.id,
-        "feature_version": model.feature_version,
-        "centroids": model.centroids,
-        "letters": model.letters,
-        "thresholds": getattr(model, 'thresholds', {}),
-        "threshold_method": getattr(model, 'threshold_method', 'percentile'),
-        "threshold_param": getattr(model, 'threshold_param', None),
-        "created_at": model.created_at.isoformat(),
+        "model_id": model_cached["id"],
+        "feature_version": model_cached.get("feature_version"),
+        "centroids": model_cached.get("centroids"),
+        "letters": model_cached.get("letters"),
+        "thresholds": model_cached.get("thresholds", {}),
+        "threshold_method": 'percentile',
+        "threshold_param": 0.88,
+        "created_at": model_cached.get("created_at").isoformat() if model_cached.get("created_at") else None,
     })
 
 
@@ -180,6 +210,7 @@ def reset_data(request):
     try:
         HandSample.objects.all().delete()
         TrainingModel.objects.all().delete()
+        _invalidate_model_cache()
         return JsonResponse({"status": "ok", "message": "Datos reiniciados"})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -205,6 +236,7 @@ def predict(request):
 
     lms = payload.get("landmarks")
     fv = payload.get("feature")
+    dynamic = bool(payload.get("dynamic", False))
     # Preferimos extraer en servidor para asegurar coherencia con el modelo entrenado
     if isinstance(lms, list) and len(lms) == 21:
         try:
@@ -214,18 +246,18 @@ def predict(request):
     elif fv is None:
         return JsonResponse({"status": "error", "message": "landmarks o feature faltan"}, status=400)
 
-    # Cargar último modelo (centroides)
-    model = TrainingModel.objects.order_by("-created_at").first()
-    if not model:
+    # Cargar último modelo (centroides) usando caché en memoria
+    model_cached = _get_cached_model()
+    if not model_cached:
         return JsonResponse({"status": "ok", "letter": None, "distance": None, "threshold": None})
 
-    # Usar umbrales persistidos con el modelo para consistencia
-    thresholds = model.thresholds or {}
-    letter, dist, thr, shape_ok = predict_with_thresholds(fv, model.centroids, thresholds)
+    centroids = model_cached["centroids"] or {}
+    thresholds = model_cached.get("thresholds", {}) or {}
+    letter, dist, thr, shape_ok = predict_with_thresholds(fv, centroids, thresholds)
     # Además, calcular candidato más cercano (aunque no pase umbral) para diagnóstico
     bestL = None
     bestD = float('inf')
-    for L, c in model.centroids.items():
+    for L, c in centroids.items():
         # l2 aquí replicando trainer._l2 para evitar import interno
         m = min(len(fv), len(c))
         s = 0.0
@@ -236,6 +268,20 @@ def predict(request):
         if dL < bestD:
             bestD = dL
             bestL = L
+    # Aceptación suave para gestos dinámicos (p. ej., 'J') cuando dynamic=true
+    accepted_dynamic = False
+    DYNAMIC_LETTERS = {"J", "Ñ", "Z"}
+    if dynamic and (letter is None) and (bestL in DYNAMIC_LETTERS):
+        thr_best = float(thresholds.get(bestL, 0.0) or 0.0)
+        # margen de aceptación cercano al umbral para dinámicos
+        if thr_best > 0 and bestD <= (thr_best * 1.6):
+            letter = bestL
+            dist = bestD
+            thr = thr_best
+            # la forma estricta puede no cumplirse en movimiento
+            shape_ok = False
+            accepted_dynamic = True
+
     return JsonResponse({
         "status": "ok",
         "letter": letter,
@@ -244,4 +290,6 @@ def predict(request):
         "shape_ok": bool(shape_ok),
         "candidate": bestL,
         "candidate_distance": bestD,
+        "accepted_dynamic": accepted_dynamic,
+        "dynamic": dynamic,
     })

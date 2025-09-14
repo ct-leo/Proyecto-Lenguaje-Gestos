@@ -64,8 +64,8 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
       const hands = new Hands({ locateFile: (file: string) => base + file })
       hands.setOptions({
         selfieMode: true,
-        maxNumHands: 2,
-        modelComplexity: 1,
+        maxNumHands: 1,            // reducir carga
+        modelComplexity: 0,        // modo rápido
         minDetectionConfidence: 0.3,
         minTrackingConfidence: 0.3,
       })
@@ -88,14 +88,16 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
         ]
         const drawConnectors = (window as any).drawConnectors
         const drawLandmarks = (window as any).drawLandmarks
+        // Dibuja puntos intermedios a lo largo de cada conexión para mayor detalle visual
+        // Micro puntos removidos para mejorar rendimiento
         for (const lms of all) {
           if (drawConnectors && drawLandmarks) {
-            drawConnectors(ctx, lms, CONN, { color: '#22d3ee', lineWidth: 4 })
-            drawLandmarks(ctx, lms, { color: '#f97316', lineWidth: 2, radius: 5 })
+            drawConnectors(ctx, lms, CONN, { color: '#22d3ee', lineWidth: 1.5 })
+            drawLandmarks(ctx, lms, { color: '#f97316', lineWidth: 1, radius: 1.8 })
           } else {
             // basic draw
             ctx.strokeStyle = '#22d3ee'
-            ctx.lineWidth = 3.5
+            ctx.lineWidth = 1.5
             ctx.beginPath()
             for (const [a,b] of CONN as any) {
               const ax = lms[a].x * w, ay = lms[a].y * h
@@ -104,7 +106,7 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
             }
             ctx.stroke()
             ctx.fillStyle = '#f97316'
-            for (const p of lms) { ctx.beginPath(); ctx.arc(p.x*w, p.y*h, 5, 0, Math.PI*2); ctx.fill() }
+            for (const p of lms) { ctx.beginPath(); ctx.arc(p.x*w, p.y*h, 1.8, 0, Math.PI*2); ctx.fill() }
           }
         }
         if (onLandmarks) {
@@ -115,13 +117,13 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
 
       handsRef.current = hands
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user', frameRate: { ideal: 30, max: 30 } }, audio: false })
       video.srcObject = stream
       await video.play()
       // sync canvas size
       const sync = () => {
-        const w = video.videoWidth || 640
-        const h = video.videoHeight || 480
+        const w = video.videoWidth || 480
+        const h = video.videoHeight || 360
         canvas.width = w; canvas.height = h
         // Ensure both video and canvas are exactly the same CSS size
         const wp = w + 'px', hp = h + 'px'
@@ -135,8 +137,8 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
       const Camera = (window as any).Camera
       cameraRef.current = new Camera(video, {
         onFrame: async () => { await hands.send({ image: video }) },
-        width: 640,
-        height: 480,
+        width: 480,
+        height: 360,
       })
       cameraRef.current.start()
     }

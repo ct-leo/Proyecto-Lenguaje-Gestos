@@ -10,6 +10,7 @@ export type PredictResponse = {
   shape_ok?: boolean
   candidate?: string
   candidate_distance?: number
+  accepted_dynamic?: boolean
 }
 
 async function getModel() {
@@ -41,14 +42,24 @@ async function train() {
   return r.json()
 }
 
-async function predict(landmarksOrPayload: Landmark[] | any, signal?: AbortSignal) {
+async function predict(
+  landmarksOrPayload: Landmark[] | any,
+  opts?: { dynamic?: boolean },
+  signal?: AbortSignal,
+) {
   const body = Array.isArray(landmarksOrPayload) && landmarksOrPayload.length === 21
     ? (() => {
         const fv = extractFeatureVector(landmarksOrPayload as Landmark[])
         if (!fv) return null
-        return { landmarks: landmarksOrPayload, feature: fv }
+        const payload: any = { landmarks: landmarksOrPayload, feature: fv }
+        if (opts?.dynamic) payload.dynamic = true
+        return payload
       })()
-    : landmarksOrPayload
+    : (() => {
+        const payload: any = landmarksOrPayload
+        if (opts?.dynamic) payload.dynamic = true
+        return payload
+      })()
   if (!body) return { status: 'error' } as PredictResponse
   const r = await fetch(`${API_BASE}/predict`, {
     method: 'POST',
