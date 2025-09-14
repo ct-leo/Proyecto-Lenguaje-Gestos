@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import SectionHeader from '../components/ui/SectionHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import Stack from '../components/ui/Stack';
+// import { Stack } from '@mui/material'; // No utilizado actualmente
 import RegisterModal from '../components/RegisterModal';
 import ConfirmModal from '../components/ConfirmModal';
 import TrainingChart from '../components/TrainingChart';
@@ -106,7 +106,7 @@ function saveDataset(_ds: Dataset) {
 
 const Vista1: React.FC = () => {
   // Estado de cámara y landmarks (usando HandCapture)
-  const [cameraOn, setCameraOn] = useState<boolean>(false);
+  const [cameraOn, setCameraOn] = useState<boolean>(true);
   const lastHandsRef = useRef<Landmark[][]>([]);
   const [hasHands, setHasHands] = useState<boolean>(false);
 
@@ -164,6 +164,12 @@ const Vista1: React.FC = () => {
   const showResult = useCallback((message: string, type: 'success'|'error'|'loading') => {
     setResultMsg({ text: message, type });
   }, []);
+
+  // Auto-start camera on first render
+  useEffect(() => {
+    setCameraOn(true);
+    showResult('Cámara iniciada correctamente', 'success');
+  }, [showResult]);
 
   const startCamera = useCallback(() => {
     setCameraOn(true);
@@ -359,16 +365,16 @@ const Vista1: React.FC = () => {
                 </div>
               </div>
               {/* Right: live detection panel */}
-              <div className="live-card shadow-hover fade-in" style={{ padding: 16, borderRadius: 10, background: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center', minWidth: 360, width: 360, justifySelf: 'end', alignSelf: 'start' }}>
-                <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 6, fontWeight: 700 }}>Vocal detectada</div>
-                <div className="vowel" style={{ fontSize: 68, fontWeight: 800, letterSpacing: 4, margin: '0 0 10px', color: '#343a40' }}>{liveLetter ?? '-'}</div>
-                <div className="meta" style={{ color: '#666', fontSize: 14, marginBottom: 10 }}>{liveMeta}</div>
-                <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 6, fontWeight: 600 }}>Confianza</div>
-                <div style={{ height: 10, background: '#e9ecef', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
-                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${confPct}%`, background: confPct >= 50 ? '#198754' : '#0d6efd', transition: 'width 120ms linear' }} />
+              <div className="live-card shadow-hover fade-in" style={{ padding: 16, borderRadius: 10, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', boxShadow: '0 2px 10px rgba(0,0,0,0.15)', textAlign: 'center', minWidth: 360, width: 360, justifySelf: 'end', alignSelf: 'start' }}>
+                <div style={{ fontSize: 12, color: 'var(--subtext)', marginBottom: 6, fontWeight: 700 }}>Vocal detectada</div>
+                <div className="vowel" style={{ fontSize: 68, fontWeight: 800, letterSpacing: 4, margin: '0 0 10px', color: 'var(--text)' }}>{liveLetter ?? '-'}</div>
+                <div className="meta" style={{ color: 'var(--subtext)', fontSize: 14, marginBottom: 10 }}>{liveMeta}</div>
+                <div style={{ fontSize: 12, color: 'var(--subtext)', marginBottom: 6, fontWeight: 600 }}>Confianza</div>
+                <div style={{ height: 10, background: 'var(--border)', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${confPct}%`, background: confPct >= 50 ? 'var(--success)' : 'var(--primary)', transition: 'width 120ms linear' }} />
                 </div>
-                <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4 }}>{confPct}%</div>
-                <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4 }}>Umbral de aceptación: 50%</div>
+                <div style={{ fontSize: 12, color: 'var(--subtext)', marginTop: 4 }}>{confPct}%</div>
+                <div style={{ fontSize: 12, color: 'var(--subtext)', marginTop: 4 }}>Umbral de aceptación: 50%</div>
                 {/* Actions directly under vocal panel */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginTop: 12 }}>
                   {!cameraOn ? (
@@ -407,8 +413,8 @@ const Vista1: React.FC = () => {
             </div>
 
             {/* Counters compact */}
-            <div style={{ marginTop: 12, background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 6, padding: 12 }}>
-              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontWeight: 600 }}>
+            <div style={{ marginTop: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontWeight: 600, color: 'var(--text)' }}>
                 <span>Vocal seleccionada: {selectedLetter ?? '-'}</span>
                 <span>Total muestras (todas letras): {totalSamples}</span>
                 <span>Muestras de la letra: {selectedLetter ? selectedCount : 0}</span>
@@ -428,11 +434,11 @@ const Vista1: React.FC = () => {
       {chartOpen && (
         <div style={{ width: 600 }}>
         <Card className="slide-in-right shadow-hover">
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Estadísticas de entrenamiento</div>
-          <div style={{ height: 10, background: '#e9ecef', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${trainingProgress}%`, background: '#0d6efd', transition: 'width 150ms linear' }} />
+          <div style={{ fontWeight: 700, marginBottom: 8, color: 'var(--text)' }}>Estadísticas de entrenamiento</div>
+          <div style={{ height: 10, background: 'var(--border)', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${trainingProgress}%`, background: 'var(--primary)', transition: 'width 150ms linear' }} />
           </div>
-          <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4 }}>{trainingProgress}%</div>
+          <div style={{ fontSize: 12, color: 'var(--subtext)', marginTop: 4 }}>{trainingProgress}%</div>
           <div style={{ marginTop: 12 }}>
             <TrainingChart series={trainingSeries} height={220} />
           </div>

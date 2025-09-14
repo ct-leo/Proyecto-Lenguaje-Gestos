@@ -1,0 +1,303 @@
+/* Correcciones específicas para el tema oscuro */
+
+/* Variables CSS mejoradas para todos los temas */
+:root {
+  /* Tema claro (por defecto) */
+  --primary: #3b82f6;
+  --primary-700: #1d4ed8;
+  --secondary: #6b7280;
+  --surface: #f8fafc;
+  --background: #ffffff;
+  --text: #1f2937;
+  --subtext: #6b7280;
+  --border: #e5e7eb;
+  --success: #10b981;
+  --danger: #ef4444;
+  --danger-600: #dc2626;
+  --warning: #f59e0b;
+  /* semantic text on backgrounds */
+  --on-primary: #0b1220; /* dark ink over light primary */
+  --on-surface: var(--text);
+  --hover-surface: rgba(0, 0, 0, 0.05);
+}
+
+/* Tema oscuro */
+[data-theme="dark"], 
+.theme-dark,
+:root.theme-dark {
+  /* Dark palette: black and dark gray */
+  --primary: #60a5fa;
+  --primary-700: #3b82f6;
+  --secondary: #a3a3a3;          /* neutral gray for secondary UI */
+  --surface: #151515;            /* dark gray (plomo oscuro) */
+  --background: #0b0b0b;         /* near-black */
+  --text: #e5e7eb;               /* light gray text */
+  --subtext: #9ca3af;            /* muted gray */
+  --border: #2a2a2a;             /* subtle dark border */
+  --success: #22c55e;            /* green */
+  --danger: #ef4444;             /* red */
+  --danger-600: #dc2626;
+  --warning: #f59e0b;            /* amber */
+  --on-primary: #0b0b0b;         /* black over lightish primary */
+  --on-surface: var(--text);
+}
+
+/* Tema espacial/neo */
+[data-theme="neo"],
+.theme-neo,
+:root.theme-neo {
+  --primary: #8b5cf6;
+  --primary-700: #7c3aed;
+  --secondary: #a78bfa;
+  --surface: #1e1b4b;
+  --background: #0f0f23;
+  --text: #e0e7ff;
+  --subtext: #c7d2fe;
+  --border: #312e81;
+  --success: #10b981;
+  --danger: #f472b6;
+  --danger-600: #ec4899;
+  --warning: #fbbf24;
+  --on-primary: #0b1220;
+  --on-surface: var(--text);
+}
+
+/* Correcciones específicas para Vista 1 */
+.vista1-container {
+  background: var(--background);
+  color: var(--text);
+}
+
+/* Arreglar elementos con colores hardcodeados */
+.result.success {
+  background-color: var(--success) !important;
+  color: white !important;
+  border-color: var(--success) !important;
+}
+
+.result.error {
+  background-color: var(--danger) !important;
+  color: white !important;
+  border-color: var(--danger) !important;
+}
+
+.result.loading {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+/* Arreglar cards y superficies */
+.card,
+[class*="Card"] {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Arreglar inputs y selects */
+input, select, textarea {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+}
+
+input::placeholder {
+  color: var(--subtext) !important;
+}
+
+/* Arreglar botones específicos */
+button {
+  color: var(--text);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Arreglar elementos específicos de MediaPipe */
+.mediapipe-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.visual-feedback {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Arreglar barras de progreso */
+.progress-bar {
+  background: var(--border) !important;
+}
+
+.progress-fill {
+  background: var(--primary) !important;
+}
+
+/* Arreglar tooltips y overlays */
+.tooltip,
+.overlay {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Arreglar elementos de estadísticas */
+.stats-container {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.stats-label {
+  color: var(--subtext) !important;
+}
+
+.stats-value {
+  color: var(--text) !important;
+}
+
+/* Arreglar canvas y video */
+video {
+  border: 2px solid var(--border);
+  border-radius: 8px;
+}
+
+canvas {
+  border: 2px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Arreglar modales */
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+.modal-content {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Arreglar elementos de entrenamiento */
+.training-controls {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.training-progress {
+  background: var(--border);
+}
+
+.training-progress-fill {
+  background: var(--primary);
+}
+
+/* Arreglar elementos de reconocimiento */
+.recognition-display {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.detected-letter {
+  color: var(--primary);
+  font-weight: bold;
+}
+
+.confidence-display {
+  color: var(--subtext);
+}
+
+/* Arreglar elementos específicos que aparecen en blanco */
+.white-text-fix {
+  color: var(--text) !important;
+}
+
+.white-bg-fix {
+  background: var(--surface) !important;
+}
+
+/* Arreglar contraste en tema oscuro */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --primary: #60a5fa;
+    --primary-700: #3b82f6;
+    --secondary: #9ca3af;
+    --surface: #374151;
+    --background: #1f2937;
+    --text: #f9fafb;
+    --subtext: #d1d5db;
+    --border: #4b5563;
+    --success: #34d399;
+    --danger: #f87171;
+    --danger-600: #ef4444;
+    --warning: #fbbf24;
+  }
+}
+
+/* Transiciones suaves para cambios de tema */
+* {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* Arreglar elementos específicos que causan problemas */
+.force-theme-colors {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.force-theme-colors * {
+  color: inherit !important;
+}
+
+/* Arreglar scrollbars en tema oscuro */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--subtext);
+}
+
+/* Arreglar focus states */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Arreglar elementos de formulario */
+.form-group {
+  color: var(--text);
+}
+
+.form-label {
+  color: var(--text);
+}
+
+.form-control {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}

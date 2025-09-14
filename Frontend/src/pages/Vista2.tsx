@@ -7,7 +7,8 @@ import Stack from '../components/ui/Stack';
 // import Select from '../components/ui/Select';
 import SelectMenu from '../components/ui/SelectMenu';
 import Button from '../components/ui/Button';
-import SectionHeader from '../components/ui/SectionHeader';
+// SectionHeader removido para una cabecera más limpia
+
 import '../styles/vista2.css';
 import { getTheme, type ThemeName } from '../lib/theme';
 
@@ -664,10 +665,16 @@ const Vista2: React.FC = () => {
     }
   }, [refreshModel, refreshProgress]);
 
+  // Ocultar scroll mientras esta vista está activa
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   return (
-    <div>
-      <SectionHeader title="Entrenamiento de Lenguaje de Señas (A..Z) – vista02" subtitle="Reconocimiento en navegador con MediaPipe (URL/CDN). Guardado en BD vía endpoints de /vista02." />
-      <div className="v2-stage">
+    <div style={{ overflow: 'hidden' }}>
+      <div className="v2-stage" style={{ marginTop: 0 }}>
         <Card className="v2-left">
           <div className="v2-video-wrap" style={{ display: 'grid', placeItems: 'center' }}>
             <AnimatePresence>
@@ -690,31 +697,44 @@ const Vista2: React.FC = () => {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div className={[
-              theme === 'neo' ? 'neo-frame' : '',
-              theme === 'neo' && hasHands ? 'neo-detect' : '',
-              theme === 'neo' && errorShake ? 'neo-error' : '',
-            ].filter(Boolean).join(' ')}>
+            <div
+              className={[
+                theme === 'neo' ? 'neo-frame' : '',
+                theme === 'neo' && hasHands ? 'neo-detect' : '',
+                theme === 'neo' && errorShake ? 'neo-error' : '',
+              ].filter(Boolean).join(' ')}
+            >
               <HandCapture onLandmarks={onLandmarks} cameraOn={cameraOn} mirror={mirror} />
             </div>
           </div>
-          <div className="v2-controls">
+        {/* Controls under video */}
+        <div className="v2-controls" style={{ display: 'grid', gap: 10 }}>
+          <div className="letter-selector">
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               Letra:
               <SelectMenu value={letter} onChange={(v) => setLetter(v)} options={letters.map((L) => ({ label: L, value: L }))} width={90} />
             </label>
+          </div>
+
+          <div className="camera-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
             {!cameraOn ? (
               <Button onClick={() => { setCameraOn(true); setStatusMsg('Cámara iniciada'); speakText('Iniciando cámara'); }}>Iniciar cámara</Button>
             ) : (
               <Button variant="danger" onClick={() => { setIsCapturing(false); setCameraOn(false); setStatusMsg('Cámara detenida'); speakText('Deteniendo cámara'); }}>Detener cámara</Button>
             )}
-            <Button onClick={toggleCapture}>{isCapturing ? 'Detener' : 'Entrenar (capturar muestras)'}</Button>
-            <Button onClick={train}>Entrenar Modelo</Button>
             <Button variant="ghost" onClick={() => refreshProgress(true, true)}>Refrescar progreso</Button>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          </div>
+
+          <div className="batch-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            <Button onClick={toggleCapture}>{isCapturing ? 'Detener' : 'Entrenar (capturar muestras)'}</Button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
               <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.currentTarget.checked)} /> Espejar overlay
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          </div>
+
+          <div className="model-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            <Button onClick={train}>Entrenar Modelo</Button>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
               <input
                 type="checkbox"
                 checked={dynamicMode}
@@ -725,6 +745,9 @@ const Vista2: React.FC = () => {
                 }}
               /> Modo dinámico
             </label>
+          </div>
+
+          <div className="voice-controls" style={{ display: 'grid', gap: 8 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={speakEnabled} onChange={(e) => setSpeakEnabled(e.currentTarget.checked)} /> Voz (leer letra)
             </label>
@@ -750,74 +773,75 @@ const Vista2: React.FC = () => {
               </>
             )}
           </div>
+        </div>
 
-          {/* Panel de progreso tipo ejemplo */}
-          <div style={{ marginTop: 10 }}>
-            <span className="v2-panel-title">Progreso</span>
-            <div className="v2-progress-bar"><span style={{ width: `${Math.min(100, Math.round((sessionCounts[letter] / Math.max(1, sampleCount)) * 100))}%` }} /></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--subtext)' }}>
-              <span>{Math.min(100, Math.round((sessionCounts[letter] / Math.max(1, sampleCount)) * 100))}%</span>
-            </div>
-            <div style={{ marginTop: 6, fontSize: 14 }}>
-              <strong>Letra seleccionada:</strong> {letter}{' '}
-              <strong style={{ marginLeft: 12 }}>Total muestras (todas letras):</strong> {progress?.total ?? '–'}{' '}
-              <strong style={{ marginLeft: 12 }}>Guardadas en BD:</strong> {progress?.totals?.[letter] ?? '–'}{' '}
-              <strong style={{ marginLeft: 12 }}>Letra detectada:</strong> {prediction.letter ?? '–'}
-            </div>
+        {/* Panel de progreso tipo ejemplo */}
+        <div style={{ marginTop: 10 }}>
+          <span className="v2-panel-title">Progreso</span>
+          <div className="v2-progress-bar"><span style={{ width: `${Math.min(100, Math.round((sessionCounts[letter] / Math.max(1, sampleCount)) * 100))}%` }} /></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--subtext)' }}>
+            <span>{Math.min(100, Math.round((sessionCounts[letter] / Math.max(1, sampleCount)) * 100))}%</span>
           </div>
-        </Card>
+          <div style={{ marginTop: 6, fontSize: 14 }}>
+            <strong>Letra seleccionada:</strong> {letter}{' '}
+            <strong style={{ marginLeft: 12 }}>Total muestras (todas letras):</strong> {progress?.total ?? '–'}{' '}
+            <strong style={{ marginLeft: 12 }}>Guardadas en BD:</strong> {progress?.totals?.[letter] ?? '–'}{' '}
+            <strong style={{ marginLeft: 12 }}>Letra detectada:</strong> {prediction.letter ?? '–'}
+          </div>
+        </div>
+      </Card>
 
-        <Card className="v2-right">
-          <div className="v2-panel-title">Letra detectada</div>
+      <Card className="v2-right prediction-display">
+        <div className="v2-panel-title">Letra detectada</div>
+        {(() => {
+          const success = theme === 'neo' && (prediction.distance != null && prediction.threshold && (1 - (prediction.distance as number) / (prediction.threshold as number)) >= 0.85 && !!prediction.letter);
+          const cls = ['v2-detected', success ? 'neo-success' : ''].filter(Boolean).join(' ');
+          return (
+            <motion.div key={prediction.letter ?? 'none'} className={cls}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', damping: 18, stiffness: 220 }}
+            >
+              {prediction.letter ?? 'Procesando...'}
+            </motion.div>
+          );
+        })()}
+        <div className="v2-confidence">
           {(() => {
-            const success = theme === 'neo' && (prediction.distance != null && prediction.threshold && (1 - (prediction.distance as number) / (prediction.threshold as number)) >= 0.85 && !!prediction.letter);
-            const cls = ['v2-detected', success ? 'neo-success' : ''].filter(Boolean).join(' ');
+            const pct = Math.round(Math.max(0, Math.min(1, confidence)) * 100);
             return (
-              <motion.div key={prediction.letter ?? 'none'} className={cls}
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', damping: 18, stiffness: 220 }}
-              >
-                {prediction.letter ?? 'Procesando...'}
-              </motion.div>
+              <>
+                <div className="v2-progress-bar">
+                  <span className="v2-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="mono muted" style={{ textAlign: 'center', marginTop: 6 }}>Confianza: {pct}%</div>
+                {dynamicMode && (
+                  <div className="mono muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'center', whiteSpace: 'pre-wrap' }}>
+                    {dynDebug || '—'}
+                  </div>
+                )}
+              </>
             );
           })()}
-          <div className="v2-confidence">
-            {(() => {
-              const pct = Math.round(Math.max(0, Math.min(1, confidence)) * 100);
-              return (
-                <>
-                  <div className="v2-progress-bar">
-                    <span className="v2-progress-fill" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className="mono muted" style={{ textAlign: 'center', marginTop: 6 }}>Confianza: {pct}%</div>
-                  {dynamicMode && (
-                    <div className="mono muted" style={{ fontSize: 11, marginTop: 6, textAlign: 'center', whiteSpace: 'pre-wrap' }}>
-                      {dynDebug || '—'}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
+        </div>
+        <Stack gap={8}>
+          <Button variant="ghost" onClick={() => refreshModel(true)} disabled={modelLoading}
+            style={{ position: 'relative', overflow: 'hidden' }}>
+            {modelLoading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span className="spin" style={{ width: 14, height: 14, border: '2px solid currentColor', borderRightColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'v2spin 0.8s linear infinite' }} />
+                Cargando...
+              </span>
+            ) : 'Cargar modelo'}
+          </Button>
+          <Button variant="danger" onClick={resetAll}>Limpiar BD</Button>
+        </Stack>
+        {modelInfo && (
+          <div className="mono muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Modelo #{modelInfo.id} · Letras: {Array.isArray(modelInfo.letters) ? modelInfo.letters.join(', ') : '–'} · {modelInfo.when ? new Date(modelInfo.when).toLocaleString() : ''}
           </div>
-          <Stack gap={8}>
-            <Button variant="ghost" onClick={() => refreshModel(true)} disabled={modelLoading}
-              style={{ position: 'relative', overflow: 'hidden' }}>
-              {modelLoading ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <span className="spin" style={{ width: 14, height: 14, border: '2px solid currentColor', borderRightColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'v2spin 0.8s linear infinite' }} />
-                  Cargando...
-                </span>
-              ) : 'Cargar modelo'}
-            </Button>
-            <Button variant="danger" onClick={resetAll}>Limpiar BD</Button>
-          </Stack>
-          {modelInfo && (
-            <div className="mono muted" style={{ fontSize: 12, marginTop: 6 }}>
-              Modelo #{modelInfo.id} · Letras: {Array.isArray(modelInfo.letters) ? modelInfo.letters.join(', ') : '–'} · {modelInfo.when ? new Date(modelInfo.when).toLocaleString() : ''}
-            </div>
-          )}
-        </Card>
+        )}
+      </Card>
       </div>
     </div>
   );

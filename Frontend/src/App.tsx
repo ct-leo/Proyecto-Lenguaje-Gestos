@@ -6,54 +6,121 @@ import Vista2 from './pages/Vista2';
 import Vista3 from './pages/Vista3';
 import { applyTheme, getTheme, type ThemeName } from './lib/theme';
 import NeoAmbient from './components/NeoAmbient';
+import ErrorBoundary from './components/ErrorBoundary';
+import TutorialOverlay from './components/TutorialOverlay';
+import SettingsPanel, { type AppSettings } from './components/SettingsPanel';
+import Button from './components/ui/Button';
+import useKeyboardNavigation from './hooks/useKeyboardNavigation';
 
 function App() {
-  const [tab, setTab] = useState<'vista1' | 'vista2' | 'vista3'>('vista2');
+  const [tab, setTab] = useState<'vista1' | 'vista2' | 'vista3'>('vista1');
   const [theme, setTheme] = useState<ThemeName>(() => getTheme());
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [_settings, setSettings] = useState<AppSettings | null>(null);
+
+  // Previously auto-opened the tutorial for first-time users.
+  // To avoid shading the entire page on initial load, we will no longer auto-open it.
+  // Users can open the tutorial manually via the "Ayuda" button or keyboard shortcut.
+  // useEffect(() => {
+  //   const hasSeenTutorial = localStorage.getItem(`tutorial-completed-${tab}`);
+  //   if (!hasSeenTutorial) {
+  //     setShowTutorial(true);
+  //   }
+  // }, [tab]);
+
+  // Keyboard navigation setup
+  useKeyboardNavigation({
+    onToggleHelp: () => setShowTutorial(true),
+    onToggleSettings: () => setShowSettings(true),
+    onCloseModal: () => {
+      setShowTutorial(false);
+      setShowSettings(false);
+    },
+    onNextLetter: () => {
+      const tabs = ['vista1', 'vista2', 'vista3'] as const;
+      const currentIndex = tabs.indexOf(tab);
+      const nextIndex = (currentIndex + 1) % tabs.length;
+      setTab(tabs[nextIndex]);
+    },
+    onPrevLetter: () => {
+      const tabs = ['vista1', 'vista2', 'vista3'] as const;
+      const currentIndex = tabs.indexOf(tab);
+      const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
+      setTab(tabs[prevIndex]);
+    }
+  });
+
+  const handleSettingsChange = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    // Apply theme change if needed
+    if (newSettings.ui.theme !== theme) {
+      setTheme(newSettings.ui.theme);
+      applyTheme(newSettings.ui.theme);
+    }
+  };
 
   return (
-    <div style={{ padding: 0, maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
-      {theme === 'neo' && <NeoAmbient />}
-      <header style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ textAlign: 'left' }}>
-            <h1 style={{ margin: 0 }}>Lenguaje de Gestos</h1>
-            <div style={{ color: 'var(--subtext)' }}>Frontend React + Vite + TS • MediaPipe por CDN</div>
+    <ErrorBoundary>
+      <div style={{ padding: 0, maxWidth: 1200, margin: '0 auto', position: 'relative' }}>
+        {theme === 'neo' && <NeoAmbient />}
+        
+        <header style={{ marginBottom: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center' }}>
+            <div />
+            <div style={{ textAlign: 'center' }}>
+              <h2 style={{ margin: 6, fontWeight: 800 }}>Proyecto de Lenguaje de Gestos</h2>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+              <Button onClick={() => setShowTutorial(true)} variant="ghost" size="small">❓ Ayuda</Button>
+              <Button onClick={() => setShowSettings(true)} variant="ghost" size="small">⚙️ Config</Button>
+              {(['light','dark','neo'] as ThemeName[]).map((t) => (
+                <Button
+                  key={t}
+                  size="small"
+                  variant={theme === t ? 'primary' : 'secondary'}
+                  onClick={() => { setTheme(t); applyTheme(t); }}
+                >
+                  {t === 'light' ? 'Claro' : t === 'dark' ? 'Oscuro' : 'Espacial'}
+                </Button>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ color: 'var(--subtext)', fontSize: 12 }}>Tema:</span>
-            {(['light','dark','neo'] as ThemeName[]).map((t) => (
-              <button key={t}
-                onClick={() => { setTheme(t); applyTheme(t); }}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 10,
-                  border: '1px solid var(--border)',
-                  background: theme === t ? 'var(--primary)' : 'var(--surface)',
-                  color: theme === t ? '#0b1220' : 'var(--text)'
-                }}
-              >
-                {t === 'light' ? 'Claro' : t === 'dark' ? 'Oscuro' : 'Espacial'}
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <Tabs
-        tabs={[
-          { key: 'vista1', label: 'Vista 1' },
-          { key: 'vista2', label: 'Vista 2' },
-          { key: 'vista3', label: 'Vista 3' },
-        ]}
-        value={tab}
-        onChange={(k) => setTab(k as any)}
-      />
+        <Tabs
+          tabs={[
+            { key: 'vista1', label: 'Vista 1 - Vocales' },
+            { key: 'vista2', label: 'Vista 2 - Alfabeto' },
+            { key: 'vista3', label: 'Vista 3 - Próximamente' },
+          ]}
+          value={tab}
+          onChange={(k) => setTab(k as any)}
+        />
 
-      {tab === 'vista1' && <Vista1 />}
-      {tab === 'vista2' && <Vista2 />}
-      {tab === 'vista3' && <Vista3 />}
-    </div>
+        {/* Main content wrapped in ErrorBoundary for each view */}
+        <ErrorBoundary>
+          {tab === 'vista1' && <Vista1 />}
+          {tab === 'vista2' && <Vista2 />}
+          {tab === 'vista3' && <Vista3 />}
+        </ErrorBoundary>
+
+        {/* Tutorial Overlay */}
+        <TutorialOverlay
+          isOpen={showTutorial}
+          onClose={() => setShowTutorial(false)}
+          steps={[]} // Will be populated by the component based on currentView
+          currentView={tab}
+        />
+
+        {/* Settings Panel */}
+        <SettingsPanel
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onSettingsChange={handleSettingsChange}
+        />
+      </div>
+    </ErrorBoundary>
   );
 }
 

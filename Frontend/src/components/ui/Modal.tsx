@@ -10,7 +10,7 @@ export type ModalProps = {
   className?: string;
 };
 
-const Modal: React.FC<ModalProps> = ({ open, title, onClose, actions, children, width = 520, className }) => {
+const Modal: React.FC<ModalProps> = ({ open, title, onClose, actions, children, width = 720, className }) => {
   if (!open) return null;
   return (
     <div
@@ -26,17 +26,22 @@ const Modal: React.FC<ModalProps> = ({ open, title, onClose, actions, children, 
       <div
         style={{
           width: typeof width === 'number' ? `${width}px` : width,
-          maxWidth: '96vw', background: '#fff', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.35)'
+          maxWidth: '96vw',
+          background: 'var(--surface)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.35)'
         }}
         onClick={(e) => e.stopPropagation()}
         className={["scale-in","shadow-hover", className].filter(Boolean).join(' ')}
       >
         {title && (
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #e9ecef', fontWeight: 700 }}>{title}</div>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', fontWeight: 700 }}>{title}</div>
         )}
         <div style={{ padding: 18 }}>{children}</div>
         {actions && (
-          <div style={{ padding: 12, borderTop: '1px solid #e9ecef', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <div style={{ padding: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             {actions}
           </div>
         )}
