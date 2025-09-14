@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reconocimiento de Manos - Vista01</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .camera-container {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+        #video {
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 400px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            pointer-events: none;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .gestos-info {
+            background-color: #e2e3e5;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .gestos-info h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .gesto {
+            margin: 10px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 3px;
+        }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.loading {
+            color: #007bff;
+        }
+        .status.ready {
+            color: #28a745;
+        }
+        .status.error {
+            color: #dc3545;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px 0 20px;
+        }
+        .toolbar .vowel-btn {
+            background-color: #6c757d;
+        }
+        .toolbar .sync-btn {
+            background-color: #17a2b8;
+        }
+        .live-card {
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+        }
+        .live-card .vowel {
+            font-size: 64px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            margin: 0 0 10px;
+            color: #343a40;
+        }
+        .live-card .meta {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Reconocimiento de Gestos de Mano</h1>
+        <p style="text-align: center; color: #666;">
+            Detecta letras vocales (A, E, I, O, U) usando gestos de mano con Mediapipe
+        </p>
+
+        <div class="status" id="mediapipeStatus">Cargando Mediapipe...</div>
+
+        <div class="camera-container">
+            <video id="video" autoplay muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" onclick="startCamera()">Iniciar Cámara</button>
+            <button id="stopBtn" onclick="stopCamera()" disabled>Detener Cámara</button>
+        </div>
+
+        <div class="toolbar">
+            <button class="vowel-btn" onclick="registerSample('A')" disabled id="btnA">Registrar A</button>
+            <button class="vowel-btn" onclick="registerSample('E')" disabled id="btnE">Registrar E</button>
+            <button class="vowel-btn" onclick="registerSample('I')" disabled id="btnI">Registrar I</button>
+            <button class="vowel-btn" onclick="registerSample('O')" disabled id="btnO">Registrar O</button>
+            <button class="vowel-btn" onclick="registerSample('U')" disabled id="btnU">Registrar U</button>
+            <button class="sync-btn" onclick="syncDataset()" id="btnSync">Sincronizar</button>
+        </div>
+
+        <div class="live-card" id="liveCard" style="display:none;">
+            <div class="vowel" id="liveVowel">-</div>
+            <div class="meta" id="liveMeta">Sin datos entrenados</div>
+        </div>
+
+        <div id="result" class="result" style="display: none;"></div>
+
+        <div class="gestos-info">
+            <h3>Gestos Reconocidos</h3>
+            <div class="gesto"><strong>A:</strong> Pulgar extendido, otros dedos cerrados</div>
+            <div class="gesto"><strong>E:</strong> Todos los dedos extendidos</div>
+            <div class="gesto"><strong>I:</strong> Índice y medio extendidos, otros doblados</div>
+            <div class="gesto"><strong>O:</strong> Mano cerrada en forma de círculo</div>
+            <div class="gesto"><strong>U:</strong> Índice y medio juntos, otros doblados</div>
+        </div>
+    </div>
+
+    <!-- Cargar Mediapipe (legacy) desde CDN como scripts globales -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Script principal -->
+    <script>
+        // Variables globales
+        let stream = null;
+        let hands = null;
+        let camera = null;
+        let lastLandmarks = null; // últimos landmarks detectados
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const resultDiv = document.getElementById('result');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusDiv = document.getElementById('mediapipeStatus');
+        const liveCard = document.getElementById('liveCard');
+        const liveVowel = document.getElementById('liveVowel');
+        const liveMeta = document.getElementById('liveMeta');
+        const vowelButtons = ['btnA','btnE','btnI','btnO','btnU'].map(id=>document.getElementById(id));
+
+        // ====== Utilidades de almacenamiento (localStorage) ======
+        const LS_KEY = 'localStorageVista01';
+        function loadDataset() {
+            try {
+                const raw = localStorage.getItem(LS_KEY);
+                if (!raw) return {samples: {A: [], E: [], I: [], O: [], U: []}, centroids: {}, thresholds: {}};
+                const obj = JSON.parse(raw);
+                obj.samples = obj.samples || {A: [], E: [], I: [], O: [], U: []};
+                obj.centroids = obj.centroids || {};
+                obj.thresholds = obj.thresholds || {};
+                return obj;
+            } catch {
+                return {samples: {A: [], E: [], I: [], O: [], U: []}, centroids: {}, thresholds: {}};
+            }
+        }
+        function saveDataset(ds) {
+            localStorage.setItem(LS_KEY, JSON.stringify(ds));
+        }
+        let DATASET = loadDataset();
+
+        // ====== Lógica de features y modelo (migrada de vista02 y adaptada a JS) ======
+        function _dist(a, b) {
+            const dx = a[0]-b[0], dy = a[1]-b[1], dz = a[2]-b[2];
+            return Math.sqrt(dx*dx + dy*dy + dz*dz);
+        }
+        function extract_feature_vector(landmarks) {
+            const pts = landmarks.map(p=>[Number(p.x||0), Number(p.y||0), Number(p.z||0)]);
+            if (pts.length !== 21) throw new Error('expected 21 landmarks');
+            const wrist = pts[0];
+            const pts_rel = pts.map(p=>[p[0]-wrist[0], p[1]-wrist[1], p[2]-wrist[2]]);
+            const middle_mcp = pts_rel[9];
+            const base = _dist([0,0,0], middle_mcp);
+            const mcp_points = [pts_rel[5], pts_rel[9], pts_rel[13], pts_rel[17]];
+            const spread = ( _dist(mcp_points[0], mcp_points[1]) + _dist(mcp_points[1], mcp_points[2]) + _dist(mcp_points[2], mcp_points[3]) )/3.0;
+            const scale = Math.max(1e-6, base + spread);
+            const pts_n = pts_rel.map(p=>[p[0]/scale, p[1]/scale, p[2]/scale]);
+            const fingers = { thumb:[2,3,4], index:[5,6,8], middle:[9,10,12], ring:[13,14,16], pinky:[17,18,20] };
+            const feat = [];
+            for (const [mcp_i, pip_i, tip_i] of Object.values(fingers)) {
+                const tip = pts_n[tip_i], pip = pts_n[pip_i], mcp = pts_n[mcp_i];
+                feat.push(_dist(tip, pip));
+                feat.push(_dist(pip, mcp));
+            }
+            const tipIdx = [8,12,16,20];
+            for (let i=0;i<tipIdx.length-1;i++) {
+                feat.push(_dist(pts_n[tipIdx[i]], pts_n[tipIdx[i+1]]));
+            }
+            const zs = pts_n.map(p=>p[2]);
+            const meanZ = zs.reduce((a,b)=>a+b,0)/zs.length;
+            const varZ = zs.reduce((a,z)=>a+(z-meanZ)*(z-meanZ),0)/zs.length;
+            feat.push(varZ);
+            return feat;
+        }
+        function _l2(a,b){
+            const m = Math.min(a.length,b.length); let s=0; for(let i=0;i<m;i++){const d=(+a[i])-(+b[i]); s+=d*d;} return Math.sqrt(s);
+        }
+        function compute_centroids(byLetter){
+            const centroids={};
+            for (const [L, vecs] of Object.entries(byLetter)){
+                if (!vecs || !vecs.length) continue;
+                const m = vecs[0].length; const acc = new Array(m).fill(0);
+                for (const v of vecs){ for (let i=0;i<m;i++) acc[i]+=Number(v[i]||0); }
+                centroids[L] = acc.map(x=>x/vecs.length);
+            }
+            return centroids;
+        }
+        function compute_thresholds(byLetter, centroids, k_std=2.0){
+            const thresholds={}; const MIN_THRESH=0.25;
+            for (const [L, vecs] of Object.entries(byLetter)){
+                const c = centroids[L]; if (!c || !vecs || !vecs.length) continue;
+                const ds = vecs.map(v=>_l2(v,c)); if (!ds.length) continue;
+                const mean = ds.reduce((a,b)=>a+b,0)/ds.length;
+                const variance = ds.reduce((a,d)=>a+(d-mean)*(d-mean),0)/ds.length;
+                const std = Math.sqrt(variance);
+                thresholds[L] = Math.max(MIN_THRESH, mean + k_std*std);
+            }
+            return thresholds;
+        }
+        function predict_with_thresholds(fv, centroids, thresholds){
+            let best=null, bestD=Infinity, bestThr=0;
+            for (const [L, c] of Object.entries(centroids)){
+                const d = _l2(fv,c); if (d<bestD){ bestD=d; best=L; bestThr = thresholds[L]||0; }
+            }
+            if (best===null) return {letter:null, distance:Infinity, threshold:0};
+            if (bestD <= bestThr && bestThr>0) return {letter:best, distance:bestD, threshold:bestThr};
+            return {letter:null, distance:bestD, threshold:bestThr};
+        }
+
+        function rebuildModelFromDataset(){
+            const byL = DATASET.samples;
+            const centroids = compute_centroids(byL);
+            const thresholds = compute_thresholds(byL, centroids);
+            DATASET.centroids = centroids;
+            DATASET.thresholds = thresholds;
+            saveDataset(DATASET);
+        }
+
+        // Registrar muestra con la vocal actual
+        window.registerSample = function(letter){
+            if (!lastLandmarks){
+                showResult('No hay mano capturada aún. Mantén la mano en cámara.', 'error');
+                return;
+            }
+            try{
+                const fv = extract_feature_vector(lastLandmarks);
+                DATASET.samples[letter] = DATASET.samples[letter] || [];
+                DATASET.samples[letter].push(fv);
+                rebuildModelFromDataset();
+                showResult(`Muestra registrada para "${letter}". Total: ${DATASET.samples[letter].length}`, 'success');
+                console.log('[Vista01] Muestra añadida', {letter, fvLength: fv.length});
+            }catch(err){
+                console.error(err);
+                showResult('Error al registrar muestra: '+err.message, 'error');
+            }
+        }
+
+        // Sincronizar (imprimir en consola)
+        window.syncDataset = function(){
+            const ds = loadDataset();
+            console.log('localStorageVista01:', ds);
+            showResult('Dataset impreso en consola.', 'success');
+        }
+
+        // Inicializar Mediapipe Hands
+        async function initializeMediapipe() {
+            try {
+                statusDiv.textContent = 'Inicializando Mediapipe...';
+                statusDiv.className = 'status loading';
+
+                hands = new Hands({
+                    locateFile: (file) => {
+                        // Usar base sin versionar para evitar 404 en CDN
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                    }
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.7,
+                    minTrackingConfidence: 0.5
+                });
+
+                hands.onResults(onResults);
+
+                statusDiv.textContent = 'Mediapipe listo';
+                statusDiv.className = 'status ready';
+                // Habilitar botones de registro al estar lista la cámara/librería
+                vowelButtons.forEach(b=>b.disabled=false);
+                liveCard.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error inicializando Mediapipe:', error);
+                statusDiv.textContent = 'Error cargando Mediapipe: ' + error.message;
+                statusDiv.className = 'status error';
+            }
+        }
+
+        // Función callback para procesar resultados de Mediapipe
+        function onResults(results) {
+            // Limpiar canvas
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar landmarks si se detecta una mano
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                for (const landmarks of results.multiHandLandmarks) {
+                    drawConnectors(ctx, landmarks, Hands.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                    drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 3});
+                }
+                lastLandmarks = results.multiHandLandmarks[0];
+                updateLivePrediction();
+            }
+            
+            ctx.restore();
+        }
+
+        function updateLivePrediction(){
+            try{
+                if (!lastLandmarks) { liveVowel.textContent='-'; liveMeta.textContent='Sin mano detectada'; return; }
+                if (!DATASET.centroids || Object.keys(DATASET.centroids).length===0) { 
+                    liveVowel.textContent = '-';
+                    liveMeta.textContent = 'Sin datos entrenados';
+                    return;
+                }
+                const fv = extract_feature_vector(lastLandmarks);
+                const pred = predict_with_thresholds(fv, DATASET.centroids, DATASET.thresholds);
+                liveVowel.textContent = pred.letter ? pred.letter : '-';
+                if (pred.letter){
+                    const conf = (pred.threshold>0) ? Math.max(0, 1 - (pred.distance/pred.threshold)) : 0;
+                    liveMeta.textContent = `dist=${pred.distance.toFixed(3)} | thr=${pred.threshold.toFixed(3)} | conf~${(conf*100).toFixed(1)}%`;
+                } else {
+                    liveMeta.textContent = `No aceptado | dist=${pred.distance.toFixed(3)} thr=${pred.threshold.toFixed(3)}`;
+                }
+            }catch(err){
+                console.error('updateLivePrediction error', err);
+            }
+        }
+
+        // Función para iniciar la cámara
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: 640, 
+                        height: 480,
+                        facingMode: 'user'
+                    } 
+                });
+                
+                video.srcObject = stream;
+                
+                // Configurar canvas con las dimensiones del video
+                canvas.width = 640;
+                canvas.height = 480;
+                
+                // Inicializar cámara de Mediapipe
+                camera = new Camera(video, {
+                    onFrame: async () => {
+                        if (hands) {
+                            await hands.send({image: video});
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                camera.start();
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+                showResult('Cámara iniciada correctamente', 'success');
+            } catch (error) {
+                showResult('Error al acceder a la cámara: ' + error.message, 'error');
+            }
+        }
+
+        // Función para detener la cámara
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+                video.srcObject = null;
+                
+                if (camera) {
+                    camera.stop();
+                    camera = null;
+                }
+                
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                
+                showResult('Cámara detenida', 'success');
+            }
+        }
+
+        // Función para mostrar resultados
+        function showResult(message, type) {
+            resultDiv.innerHTML = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+
+        // Hacer funciones globales
+        window.startCamera = startCamera;
+        window.stopCamera = stopCamera;
+        // Exponer utilidades
+        window.startCamera = startCamera;
+        window.stopCamera = stopCamera;
+
+        // Inicializar Mediapipe al cargar la página
+        initializeMediapipe();
+
+        // Limpiar al cerrar la página
+        window.addEventListener('beforeunload', stopCamera);
+    </script>
+</body>
+</html>

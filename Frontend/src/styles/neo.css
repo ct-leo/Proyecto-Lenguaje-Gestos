@@ -1,0 +1,121 @@
+/* Neo Cyberpunk Theme */
+:root {
+  --neo-bg1: #0a0a0f;
+  --neo-bg2: #1a1a2e;
+  --neo-cyan: #00f5ff;
+  --neo-purple: #8b5cf6;
+  --neo-green: #39ff14;
+  --neo-orange: #ff6b35;
+  --neo-text: #ffffff;
+  --neo-sub: #e2e8f0;
+  --neo-shadow: #000000aa;
+}
+
+.neo-root {
+  min-height: 100vh;
+  background: radial-gradient(1200px 800px at 70% 10%, #0f1630 0%, transparent 60%),
+              linear-gradient(160deg, var(--neo-bg1) 0%, var(--neo-bg2) 100%);
+  color: var(--neo-text);
+  position: relative;
+  overflow: hidden;
+  font-family: 'Exo 2', system-ui, sans-serif;
+}
+
+/* floating panels */
+.neo-grid {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 18px;
+}
+
+.neo-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 20px 50px var(--neo-shadow), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.neo-camera {
+  position: relative;
+  padding: 16px;
+}
+
+/* neon frame */
+.neo-frame {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: linear-gradient(#0000, #0000) padding-box,
+              linear-gradient(90deg, var(--neo-cyan), var(--neo-purple)) border-box;
+  box-shadow: 0 0 30px rgba(0,245,255,0.2), 0 0 30px rgba(139,92,246,0.15) inset;
+}
+
+.neo-frame.pulse {
+  animation: neoPulse 2s ease-in-out infinite;
+}
+
+@keyframes neoPulse {
+  0%, 100% { box-shadow: 0 0 22px rgba(0,245,255,0.18), 0 0 22px rgba(139,92,246,0.12) inset; }
+  50% { box-shadow: 0 0 44px rgba(0,245,255,0.35), 0 0 44px rgba(139,92,246,0.26) inset; }
+}
+
+.neo-status-led {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.neo-overlay-guides {
+  pointer-events: none;
+  position: absolute; inset: 0;
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04) inset;
+}
+
+.neo-controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+.neo-controls .neo-btn {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: linear-gradient(90deg, rgba(0,245,255,0.12), rgba(139,92,246,0.12));
+  color: var(--neo-text);
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .25s ease, background .25s ease;
+}
+.neo-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.35), 0 0 12px rgba(0,245,255,.35); }
+.neo-btn.primary { background: linear-gradient(90deg, var(--neo-cyan), var(--neo-purple)); border-color: transparent; color:#0b1220; }
+.neo-btn.success { background: linear-gradient(90deg, #19ff64, #39ff14); color:#0b1220; border-color: transparent; }
+.neo-btn.danger { background: linear-gradient(90deg, #ff6b35, #ff914d); color:#0b1220; border-color: transparent; }
+
+/* recognition panel */
+.neo-recog { padding:16px; }
+.neo-title { font-family: 'Orbitron', sans-serif; letter-spacing: 1px; font-weight: 800; }
+.neo-detected { font-family: 'Orbitron', sans-serif; font-size:64px; line-height:1; text-align:center; margin:10px 0; }
+
+.neo-bar { height: 12px; border-radius:9999px; background: rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); overflow:hidden; }
+.neo-bar > span { display:block; height:100%; background: linear-gradient(90deg, var(--neo-cyan), var(--neo-purple)); box-shadow: 0 0 18px rgba(0,245,255,.35); }
+
+.neo-history { display:flex; gap:8px; margin-top:8px; }
+.neo-chip { padding:6px 10px; border-radius:9999px; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); font-family:'Roboto Mono', monospace; }
+
+/* dictionary/tutorials */
+.neo-side { padding:16px; }
+.neo-card-mini { padding:12px; border-radius:12px; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); transition: transform .2s ease, box-shadow .25s ease; }
+.neo-card-mini:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.35), 0 0 10px rgba(139,92,246,.35); }
+
+/* particles container */
+.neo-particles { position: fixed; inset: 0; z-index: 0; }
+.neo-layer { position: relative; z-index: 1; }
+
+@media (max-width: 1100px) {
+  .neo-grid { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,126 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+media/
+
+# Archivos de configuración sensibles
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos del sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archivos de Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Archivos de testing
+.tox/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Archivos de Jupyter Notebook
+.ipynb_checkpoints
+
+# Archivos de pyenv
+.python-version
+
+# Archivos de pipenv
+Pipfile.lock
+
+# Archivos de celery
+celerybeat-schedule
+celerybeat.pid
+
+# Archivos de SageMath
+*.sage.py
+
+# Archivos de Spyder
+.spyderproject
+.spyproject
+
+# Archivos de Rope
+.ropeproject
+
+# Archivos de mkdocs
+/site
+
+# Archivos de mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Archivos de Pyre
+.pyre/
+
+# Archivos de pytype
+.pytype/
+
+# Archivos de Cython
+cython_debug/
+
+# Archivos de Mediapipe (si se generan temporalmente)
+*.pkl
+*.h5
+*.hdf5
+
+# Archivos de modelos de TensorFlow
+*.pb
+*.tflite
+*.onnx
+
+# Archivos de logs específicos del proyecto
+logs/
+*.log
+
+# Archivos temporales
+tmp/
+temp/
+*.tmp
+*.temp

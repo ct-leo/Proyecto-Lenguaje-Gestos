@@ -1,0 +1,186 @@
+:root {
+  /* Paleta solicitada */
+  --bg: #FAFAFA;             /* Marfil – fondo principal */
+  --text: #2E2E2E;           /* Grafito – tipografía */
+  --border: #C4C4C4;         /* Plata suave – bordes y divisores */
+  --surface: #FFFFFF;        /* Superficie principal (cards) */
+  --muted-surface: #E5DED3;  /* Beige cálido – fondos alternativos */
+
+  --primary: #0FA958;        /* Verde esmeralda – acento */
+  --primary-600: #0c8a48;
+  --primary-700: #0a713b;
+  --accent: #0FA958;         /* usar el mismo acento */
+  --danger: #ef4444;         /* se mantiene para acciones destructivas */
+  --danger-600: #dc2626;
+  --code: #111827;           /* panel para bloques pre/monospace */
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== THEME: Dark ===== */
+[data-theme="dark"] {
+  --bg: #0f172a;             /* slate-900 */
+  --text: #e5e7eb;           /* gray-200 */
+  --border: #334155;         /* slate-700 */
+  --surface: #111827;        /* gray-900 */
+  --muted-surface: #0b1220;  /* deep backdrop */
+
+  --primary: #0ea5e9;        /* sky-500 */
+  --primary-600: #0284c7;
+  --primary-700: #0369a1;
+  --accent: #22d3ee;         /* cyan-400 */
+  --danger: #ef4444;
+  --danger-600: #dc2626;
+  --code: #0b1220;
+
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ===== THEME: Neo (Espacial) ===== */
+[data-theme="neo"] {
+  --bg: #0b0f1a;             /* space dark */
+  --text: #dce3f2;           /* cold light */
+  --border: #1b2437;         /* deep blue border */
+  --surface: #0f1526;        /* panel */
+  --muted-surface: #0b1220;  /* alt */
+
+  --primary: #7c3aed;        /* violet-600 */
+  --primary-600: #6d28d9;
+  --primary-700: #5b21b6;
+  --accent: #22d3ee;         /* cyan-400 */
+  --danger: #ef4444;
+  --danger-600: #dc2626;
+  --code: #0b1220;
+
+  color: var(--text);
+  background: radial-gradient(1000px 600px at 15% 10%, rgba(124,58,237,0.18), transparent 60%),
+              radial-gradient(900px 540px at 85% 20%, rgba(34,211,238,0.12), transparent 60%),
+              var(--bg);
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.2rem;
+  line-height: 1.2;
+}
+
+button {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 0.6em 1.0em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  background-color: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.02s ease;
+}
+button:hover {
+  transform: translateY(-1px);
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid var(--primary);
+}
+
+/* Forzamos paleta clara por defecto */
+
+/* cards and layout helpers */
+.card {
+  background: #ffffff10;
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.25);
+}
+
+.soft-card {
+  background: #ffffff08;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.muted-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* ===== Animations & Transitions (shared) ===== */
+.fade-in {
+  animation: fadeIn 240ms ease-out both;
+}
+
+.scale-in {
+  animation: scaleIn 200ms ease-out both;
+}
+
+.slide-in-right {
+  animation: slideInRight 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.slide-in-up {
+  animation: slideInUp 260ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.shadow-hover {
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+.shadow-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(0,0,0,0.14);
+}
+
+.soft-hover {
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+.soft-hover:hover {
+  background-color: #f6f8fa;
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}

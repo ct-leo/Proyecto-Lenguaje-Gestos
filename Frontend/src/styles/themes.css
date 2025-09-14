@@ -1,0 +1,76 @@
+/* Sistema de temas global basado en data-theme en <html> */
+/* Variables comunes */
+:root {
+  --radius: 12px;
+  --font-ui: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-display: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Tema claro */
+:root[data-theme="light"] {
+  --bg: #FAFAFA;               /* marfil */
+  --surface: #FFFFFF;
+  --muted-surface: #E5DED3;    /* beige cálido */
+  --text: #2E2E2E;             /* grafito */
+  --subtext: #6b7280;          /* gris medio */
+  --primary: #0FA958;          /* verde esmeralda */
+  --border: #C4C4C4;           /* plata suave */
+  --danger: #ff6b35;           /* naranja alerta */
+}
+
+/* Tema oscuro */
+:root[data-theme="dark"] {
+  --bg: #111827;               /* gris pizarra muy oscuro */
+  --surface: #0f172a;          /* paneles */
+  --muted-surface: #111827;
+  --text: #e5e7eb;             /* texto claro */
+  --subtext: #9ca3af;
+  --primary: #0ea5e9;          /* cian */
+  --border: #1f2937;
+  --danger: #ef4444;
+}
+
+/* Tema espacial (NEO) */
+:root[data-theme="neo"] {
+  --bg: radial-gradient(1200px 800px at 70% 10%, #0f1630 0%, transparent 60%),
+        linear-gradient(160deg, #0a0a0f 0%, #1a1a2e 100%);
+  --surface: rgba(255,255,255,0.04);
+  --muted-surface: rgba(255,255,255,0.06);
+  --text: #ffffff;
+  --subtext: #e2e8f0;
+  --primary: #00f5ff;          /* cian eléctrico */
+  --border: rgba(255,255,255,0.12);
+  --danger: #ff6b35;
+}
+
+/* Neo-only micro-interactions */
+:root[data-theme="neo"] .neo-frame {
+  position: relative;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  background: linear-gradient(#0000,#0000) padding-box,
+              linear-gradient(90deg, var(--primary), #8b5cf6) border-box;
+  box-shadow: 0 0 24px rgba(0,245,255,0.18);
+  overflow: hidden;
+}
+
+/* subtle pulse when detecting hands */
+@keyframes neoPulseBorder { 0%,100% { box-shadow: 0 0 24px rgba(0,245,255,0.18);} 50% { box-shadow: 0 0 40px rgba(0,245,255,0.34);} }
+:root[data-theme="neo"] .neo-detect { animation: neoPulseBorder 2s ease-in-out infinite; }
+
+/* success glow scale */
+@keyframes neoSuccessGlow { 0% { transform: scale(0.995); box-shadow: 0 0 0 rgba(57,255,20,0.0);} 60% { transform: scale(1.008); box-shadow: 0 0 36px rgba(57,255,20,0.35);} 100% { transform: scale(1); box-shadow: 0 0 0 rgba(57,255,20,0.0);} }
+:root[data-theme="neo"] .neo-success { animation: neoSuccessGlow 0.6s ease-out 1; }
+
+/* error shake */
+@keyframes neoShake { 10%, 90% { transform: translateX(-2px);} 20%, 80% { transform: translateX(4px);} 30%, 50%, 70% { transform: translateX(-6px);} 40%, 60% { transform: translateX(6px);} }
+:root[data-theme="neo"] .neo-error { animation: neoShake 0.5s ease both; box-shadow: 0 0 20px rgba(255, 107, 53, 0.45); }
+
+/* hover levitation for buttons */
+:root[data-theme="neo"] button:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,.35), 0 0 14px rgba(0,245,255,.35); }
+
+/* loading matrix rain overlay (optional container uses .neo-matrix) */
+:root[data-theme="neo"] .neo-matrix { position: fixed; inset:0; pointer-events:none; z-index: 1; background: repeating-linear-gradient( to bottom, rgba(0,255,170,0.08) 0 2px, transparent 2px 4px ); mask-image: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent); }
+@keyframes neoMatrixFall { to { background-position-y: 400px; } }
+:root[data-theme="neo"] .neo-matrix { animation: neoMatrixFall 1.8s linear infinite; }
