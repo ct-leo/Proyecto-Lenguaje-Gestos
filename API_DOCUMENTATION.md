@@ -8,6 +8,7 @@ Esta API implementa el reconocimiento de gestos de mano utilizando Mediapipe en 
 - **Backend**: Recibe resultados procesados y los almacena en la base de datos temporal
 - **Comunicación**: JSON entre frontend y backend
 
+
 ## Endpoints Disponibles
 
 ### 1. GET /vista01/
@@ -336,4 +337,5 @@ Riesgos: posibles conflictos de versiones con otros proyectos y dificultad para 
 
 ## Notas y roadmap
 - El frontend de demo (`ejemplo2_frontend.html`) es provisional. La migración prevista es a **React + TypeScript**, reusando los endpoints de `vista02`.
+
 - El sistema es deliberadamente estricto: gestos “parecidos” no son aceptados si cambias la postura de un dedo clave (por ejemplo, asomar el pulgar en la letra B).
