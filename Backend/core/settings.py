@@ -115,6 +115,9 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.devproyectos.com",
 ]
 
+# When behind a reverse proxy (e.g., Nginx) that terminates TLS, trust X-Forwarded-Proto
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Seguridad básica adicional para producción
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True

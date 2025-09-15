@@ -1,5 +1,29 @@
 export const API_BASE = import.meta.env.VITE_API_BASE ?? '/vista02/api'
 
+// Robust fetch with timeout and status checks for production
+async function request(path: string, init?: RequestInit, timeoutMs = 8000) {
+  const ctrl = new AbortController()
+  const id = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const resp = await fetch(`${API_BASE}${path}`, { ...(init || {}), signal: ctrl.signal })
+    if (!resp.ok) {
+      // Try to parse JSON error, fallback to text
+      let body: any = null
+      try { body = await resp.clone().json() } catch {
+        try { body = await resp.text() } catch { body = null }
+      }
+      const err = new Error(`HTTP ${resp.status} ${resp.statusText} for ${path}`)
+      ;(err as any).status = resp.status
+      ;(err as any).body = body
+      throw err
+    }
+    // Prefer JSON, fallback to text
+    try { return await resp.json() } catch {
+      return await resp.text()
+    }
+  } finally { clearTimeout(id) }
+}
+
 export type Landmark = { x: number; y: number; z: number }
 
 export type PredictResponse = {
@@ -13,34 +37,21 @@ export type PredictResponse = {
   accepted_dynamic?: boolean
 }
 
-async function getModel() {
-  const r = await fetch(`${API_BASE}/model`)
-  return r.json()
-}
+async function getModel() { return request(`/model`) }
 
-async function progress() {
-  const r = await fetch(`${API_BASE}/progress`)
-  return r.json()
-}
+async function progress() { return request(`/progress`) }
 
-async function lastDetected() {
-  const r = await fetch(`${API_BASE}/last-detected`)
-  return r.json()
-}
+async function lastDetected() { return request(`/last-detected`) }
 
 async function samplesBatch(letter: string, samples: any[]) {
-  const r = await fetch(`${API_BASE}/samples/batch`, {
+  return request(`/samples/batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ letter, samples }),
   })
-  return r.json()
 }
 
-async function train() {
-  const r = await fetch(`${API_BASE}/train`, { method: 'POST' })
-  return r.json()
-}
+async function train() { return request(`/train`, { method: 'POST' }) }
 
 async function predict(
   landmarksOrPayload: Landmark[] | any,
@@ -61,19 +72,15 @@ async function predict(
         return payload
       })()
   if (!body) return { status: 'error' } as PredictResponse
-  const r = await fetch(`${API_BASE}/predict`, {
+  return await request(`/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
-  })
-  return (await r.json()) as PredictResponse
+  }) as PredictResponse
 }
 
-async function reset() {
-  const r = await fetch(`${API_BASE}/reset`, { method: 'POST' })
-  return r.json()
-}
+async function reset() { return request(`/reset`, { method: 'POST' }) }
 
 export const api = { getModel, progress, lastDetected, samplesBatch, train, predict, reset }
 export default api

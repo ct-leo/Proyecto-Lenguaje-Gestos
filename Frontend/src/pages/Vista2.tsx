@@ -121,15 +121,15 @@ const Vista2: React.FC = () => {
   const lastDynAtRef = useRef<number>(0);
   const lastDynLetterRef = useRef<string | null>(null);
   const DYN_WINDOW = 18;
-  const DYN_MIN_AVG_CONF = 0.50;     // antes 0.55
-  const DYN_MIN_SHAPE_OK_FRAC = 0.25; // antes 0.3
+  const DYN_MIN_AVG_CONF = 0.45;     // más permisivo
+  const DYN_MIN_SHAPE_OK_FRAC = 0.20; // más permisivo
   // Heurística de movimiento para diferenciar J (dinámica) de I (estática)
   const l8yHistRef = useRef<number[]>([]); // historial de Y del tip del índice (landmark 8)
   const l8xHistRef = useRef<number[]>([]); // historial de X del tip del índice (landmark 8)
-  const J_MIN_Y_AMPL = 0.012;   // súper sensible para pruebas
-  const J_MIN_ENERGY_Y = 0.05;  // energía vertical baja
-  const J_MIN_X_AMPL = 0.012;   // permitir arco horizontal pequeño
-  const J_MIN_ENERGY_X = 0.05;  // energía horizontal baja
+  const J_MIN_Y_AMPL = 0.008;   // más permisivo
+  const J_MIN_ENERGY_Y = 0.035; // más permisivo
+  const J_MIN_X_AMPL = 0.008;   // más permisivo
+  const J_MIN_ENERGY_X = 0.035; // más permisivo
 
   function majority(arr: (string | null)[]) {
     const counts: Record<string, number> = {};
@@ -405,19 +405,15 @@ const Vista2: React.FC = () => {
       // Si backend aceptó dinámico (p. ej., gesto en movimiento), no anulamos L por shape_ok
       let shapeOK = shapeOK_resp;
       if (acceptedDyn) {
-        // No elevamos aquí si el backend aceptó dinámico para Z; se valida luego con movimiento.
+        // Aceptación dinámica del backend sólo cuenta si hay movimiento fuerte
         const isZ = (cand === 'Z') || (L === 'Z');
         shapeOK = false; // dinámico no requiere forma estricta
-        if (!isZ) {
-          conf = Math.max(conf, 0.9);
-          // reflejar la barra de confianza de inmediato
-          setConfidence(conf);
-          // Registrar última letra dinámica reforzada si aplica (no para Z aquí)
+        if (!isZ && dynamicRef.current) {
+          // Sólo si hay movimiento fuerte elevamos la confianza
           const DYN_LETTERS = new Set(['J','Ñ','Z']);
-          if (L && DYN_LETTERS.has(L)) {
-            lastDynLetterRef.current = L;
-            lastDynAtRef.current = performance.now();
-          }
+          const involvesDyn = (L && DYN_LETTERS.has(L)) || (cand && DYN_LETTERS.has(cand));
+          const hasStrongMove = true; // se comprueba más adelante; aquí no subimos aún
+          // Nota: diferimos el boost a la sección de movimiento para unificar lógica
         }
       } else if (!shapeOK) {
         // Sin forma válida y sin aceptación dinámica: no incrementamos confianza para evitar falsos positivos.
@@ -500,32 +496,38 @@ const Vista2: React.FC = () => {
         const strongMove = strongMoveY || strongMoveX;
         setDynDebug(prev => `${prev}\nwin: avgC=${avgConf.toFixed(2)} shape%=${(shapeFrac*100).toFixed(0)} | dY=${amplY.toFixed(3)} Ey=${energyY.toFixed(3)} dX=${amplX.toFixed(3)} Ex=${energyX.toFixed(3)} move=${strongMove}`);
 
-        // Regla previa específica para Z: si no hay movimiento fuerte, no permitir que Z suba confianza
-        // ni se fije por mayoría/bloqueo. Esto evita que Z aparezca en quietud aunque esté cerca del umbral.
+        // Dinámicos (J/Ñ/Z): permitir mostrarse incluso sin movimiento fuerte, pero con confianza más baja.
+        // Sólo aplicamos una caída dura si literalmente no hay señal de forma (shapeFrac muy bajo) y avgConf muy bajo.
         {
-          const isZInvolved = (cand === 'Z') || (L === 'Z') || (final === 'Z');
-          if (isZInvolved && !strongMove) {
-            // En quietud, mantén confianza baja y evita fijar Z.
-            if (final === 'Z') final = null;
-            if (L === 'Z') L = null;
-            conf = Math.min(conf, 0.2);
+          const DYN_LETTERS = new Set(['J','Ñ','Z']);
+          const dynInvolved = (cand && DYN_LETTERS.has(cand)) || (L && DYN_LETTERS.has(L)) || (final && DYN_LETTERS.has(final));
+          if (dynInvolved && !strongMove) {
+            if (shapeFrac < 0.01 && avgConf < 0.15) {
+              // caso extremo: anular
+              if (final && DYN_LETTERS.has(final)) final = null;
+              if (L && DYN_LETTERS.has(L)) L = null;
+              conf = Math.min(conf, 0.15);
+            } else {
+              // permitir visualización con confianza moderada
+              conf = Math.max(conf, 0.6);
+            }
           }
         }
 
-        // Regla 1: si hay suficiente evidencia de forma y confianza, usar mayoría/bloqueo
-        if (avgConf >= DYN_MIN_AVG_CONF && shapeFrac >= DYN_MIN_SHAPE_OK_FRAC) {
+        // Regla 1: si hay suficiente evidencia de forma y confianza, usar mayoría/bloqueo (ligeramente más permisivo)
+        if (avgConf >= DYN_MIN_AVG_CONF && shapeFrac >= Math.max(0.02, DYN_MIN_SHAPE_OK_FRAC * 0.8)) {
           if (!final) final = lockLetterRef.current;
         }
 
         // Regla 2: letra dinámica (J/Ñ, etc.) solo si el backend la apoya como candidata y la distancia está cerca del umbral
-        const nearThr = (thr > 0) && ((isFinite(dist) && dist <= thr * 1.60) || (candDist != null && isFinite(candDist) && candDist <= thr * 1.60));
+        const nearThr = (thr > 0) && ((isFinite(dist) && dist <= thr * 2.0) || (candDist != null && isFinite(candDist) && candDist <= thr * 2.0));
         const DYN_LETTERS = new Set(['J','Ñ','Z']);
         const backendHintsDyn = ((cand && DYN_LETTERS.has(cand)) || (L && DYN_LETTERS.has(L)) || (resp as any).accepted_dynamic === true);
-        if (strongMove && backendHintsDyn && nearThr && (shapeFrac >= 0.05)) {
+        if (backendHintsDyn && nearThr && (shapeFrac >= 0.02)) {
           const dynCand = (cand && DYN_LETTERS.has(cand)) ? cand : ((L && DYN_LETTERS.has(L)) ? L : null);
           if (dynCand) final = dynCand as any;
           // Garantizar confianza visual alta cuando aceptamos J dinámica
-          const targetConf = (resp as any).accepted_dynamic ? 0.9 : 0.88;
+          const targetConf = strongMove ? ((resp as any).accepted_dynamic ? 0.95 : 0.92) : 0.85;
           conf = Math.max(conf, targetConf);
           lastConfRef.current = Math.max(lastConfRef.current, targetConf);
           setConfidence(conf);
@@ -534,17 +536,26 @@ const Vista2: React.FC = () => {
           lastDynLetterRef.current = final || null;
           lastDynAtRef.current = performance.now();
           // Solo con evidencia de movimiento activamos el piso dinámico al final
-          if (final && DYN_LETTERS.has(final)) dynShouldFloor = true;
+          if (final && DYN_LETTERS.has(final)) dynShouldFloor = strongMove;
         } else {
-          // Sin promoción dinámica a J: conservar la letra por mayoría/bloqueo si existe.
-          // No forzamos a null para no ocultar detecciones estáticas mientras el modo dinámico está activo.
+          // En dinámico, sin movimiento fuerte: caída agresiva para letras dinámicas
+          const DYN_LETTERS2 = new Set(['J','Ñ','Z']);
+          if (strongMove === false && ((final && DYN_LETTERS2.has(final)) || (L && DYN_LETTERS2.has(L)) || (cand && DYN_LETTERS2.has(cand)))) {
+            // no anular por completo; solo bajar la confianza si no hay movimiento
+            conf = Math.min(conf, 0.5);
+            // liberar bloqueo si era dinámico
+            if (lockLetterRef.current && DYN_LETTERS2.has(lockLetterRef.current)) {
+              lockLetterRef.current = null; lockThrRef.current = 0; mismatchCountRef.current = 0;
+            }
+            lastDynLetterRef.current = null;
+          }
         }
         // Si hace menos de 300 ms que hubo evidencia dinámica, mantener estable la última letra dinámica reforzada
         const nowTs = performance.now();
         const sinceDyn = nowTs - lastDynAtRef.current;
-        if (sinceDyn >= 0 && sinceDyn <= 300 && lastDynLetterRef.current) {
+        if (sinceDyn >= 0 && sinceDyn <= 600 && lastDynLetterRef.current) {
           final = lastDynLetterRef.current;
-          conf = Math.max(conf, 0.9);
+          conf = Math.max(conf, strongMove ? 0.92 : 0.85);
           dynShouldFloor = true;
         }
         // Si no hay movimiento ni cercanía dinámica por >350ms, bajar confianza y soltar la última dinámica

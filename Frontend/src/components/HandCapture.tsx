@@ -13,6 +13,11 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const handsRef = useRef<any>(null)
   const cameraRef = useRef<any>(null)
+  // Track the latest live instance so old frames don't call into disposed Hands
+  const genRef = useRef<number>(0)
+  // Keep a stable ref to onLandmarks so changing parent callback doesn't restart camera
+  const onLandmarksRef = useRef<Props['onLandmarks'] | undefined>(undefined)
+  onLandmarksRef.current = onLandmarks
 
   const [mpReady, setMpReady] = useState(false)
   // Ensure CDN scripts are present (drawing_utils, camera_utils, hands)
@@ -54,6 +59,8 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
   useEffect(() => {
     let stopped = false
     const start = async () => {
+      // Bump generation to invalidate any previous onFrame callbacks
+      const myGen = ++genRef.current
       const video = videoRef.current
       const canvas = canvasRef.current
       if (!video || !canvas) return
@@ -70,6 +77,7 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
         minTrackingConfidence: 0.3,
       })
       hands.onResults((res: any) => {
+        if (stopped || myGen !== genRef.current) return
         const ctx = ctxRef.current
         if (!ctx || stopped) return
         const w = canvas.width, h = canvas.height
@@ -137,17 +145,38 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
             ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
           }
         }
-        if (onLandmarks) {
+        if (onLandmarksRef.current) {
           const mapped: Landmark[][] = all.map((l: any) => l.map((p: any) => ({ x: p.x, y: p.y, z: p.z })))
-          onLandmarks(mapped)
+          try { onLandmarksRef.current(mapped) } catch {}
         }
       })
 
       handsRef.current = hands
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, facingMode: 'user', frameRate: { ideal: 24, max: 24 } }, audio: false })
+      // Request camera stream (handle HTTPS/permission/autoplay issues)
+      let stream: MediaStream | null = null
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 480, height: 360, facingMode: 'user', frameRate: { ideal: 24, max: 24 } },
+          audio: false,
+        })
+      } catch (err) {
+        console.error('getUserMedia failed:', err)
+        return // abort start; without camera we cannot proceed
+      }
+      if (!stream) return
       video.srcObject = stream
-      await video.play()
+      try {
+        await video.play()
+      } catch (err) {
+        console.warn('video.play() failed (autoplay?)', err)
+        // If autoplay is blocked, wait for a user gesture (click) to play
+        const onInteract = async () => {
+          try { await video.play() } catch {}
+          window.removeEventListener('pointerdown', onInteract)
+        }
+        window.addEventListener('pointerdown', onInteract, { once: true })
+      }
       // sync canvas size
       const sync = () => {
         const w = video.videoWidth || 480
@@ -162,9 +191,44 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
       }
       if (video.readyState >= 1) sync(); else video.addEventListener('loadedmetadata', sync, { once: true })
 
+      // Wait until video has non-zero dimensions to avoid MediaPipe ROI assertion
+      const waitForDims = async () => {
+        let tries = 0
+        while (!stopped && tries < 50) { // ~5s max
+          const vw = video.videoWidth
+          const vh = video.videoHeight
+          if (vw > 0 && vh > 0) return true
+          await new Promise(r => setTimeout(r, 100))
+          tries++
+        }
+        return false
+      }
+      const okDims = await waitForDims()
+      if (!okDims) {
+        console.warn('Video dimensions remained 0; aborting camera start')
+        return
+      }
+
       const Camera = (window as any).Camera
       cameraRef.current = new Camera(video, {
-        onFrame: async () => { await hands.send({ image: video }) },
+        onFrame: async () => {
+          if (stopped || myGen !== genRef.current) return
+          // Safety guard: skip when video has zero size (can happen briefly on page/tab visibility changes)
+          const vw = (video as HTMLVideoElement).videoWidth
+          const vh = (video as HTMLVideoElement).videoHeight
+          if (!vw || !vh) return
+          try {
+            // Ensure we're still the active hands instance
+            if (handsRef.current !== hands) return
+            await hands.send({ image: video })
+          } catch (err: any) {
+            const msg = String(err && (err.message || err))
+            // Ignore Emscripten binding error that happens if an old instance receives a late frame
+            if (msg.includes('deleted object') || msg.includes('SolutionWasm')) return
+            // Surface other errors to the console for visibility
+            console.warn('hands.send error:', err)
+          }
+        },
         width: 480,
         height: 360,
       })
@@ -173,6 +237,8 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
 
     const stop = async () => {
       stopped = true
+      // Invalidate any in-flight onFrame callbacks from previous instance
+      genRef.current++
       try { cameraRef.current && cameraRef.current.stop && await cameraRef.current.stop() } catch {}
       cameraRef.current = null
       try { handsRef.current && handsRef.current.close && await handsRef.current.close() } catch {}
@@ -188,7 +254,7 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
 
     if (cameraOn && mpReady) start(); else stop()
     return () => { stop() }
-  }, [cameraOn, mirror, onLandmarks, mpReady])
+  }, [cameraOn, mirror, mpReady])
 
   return (
     <div className="video-wrap">

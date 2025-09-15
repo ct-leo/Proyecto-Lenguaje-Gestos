@@ -129,6 +129,35 @@ const Vista1: React.FC = () => {
   const trainingTimerRef = useRef<number | null>(null);
   const [trainingSeries, setTrainingSeries] = useState<number[]>([]);
 
+  // ===== Voz (Text-to-Speech) para anunciar vocales detectadas =====
+  const [speakEnabled, setSpeakEnabled] = useState<boolean>(true);
+  const lastSpokenRef = useRef<string | null>(null);
+  const lastSpokenAtRef = useRef<number>(0);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceKey, setVoiceKey] = useState<string>(''); // name::lang
+  const speakVolumeRef = useRef<number>(1);
+  const [speakVolume, setSpeakVolume] = useState<number>(1);
+  useEffect(() => { speakVolumeRef.current = speakVolume; }, [speakVolume]);
+  // Cargar voces disponibles
+  useEffect(() => {
+    let tries = 0;
+    const loadVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (!v || v.length === 0) {
+        if (tries < 10) { tries++; setTimeout(loadVoices, 200); }
+        return;
+      }
+      setVoices(v);
+      if (!voiceKey && v.length) {
+        const pref = v.find((vv) => (vv.lang || '').toLowerCase().startsWith('es')) || v[0];
+        if (pref) setVoiceKey(`${pref.name}::${pref.lang}`);
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { (window.speechSynthesis as any).onvoiceschanged = null; };
+  }, [voiceKey]);
+
   const totalSamples = useMemo(() => (
     Object.values(dataset.samples).reduce((acc, arr) => acc + (arr?.length || 0), 0)
   ), [dataset.samples]);
@@ -312,6 +341,44 @@ const Vista1: React.FC = () => {
     return () => { if (raf) cancelAnimationFrame(raf); };
   }, [cameraOn, updateLivePrediction]);
 
+  // ===== Lógica de voz: anunciar vocal detectada (A/E/I/O/U) sólo si hay modelo entrenado =====
+  const speakVowel = useCallback((text: string) => {
+    try {
+      if (!speakEnabled) return;
+      if (!text || !text.trim()) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      const vs = voices || [];
+      if (voiceKey) {
+        const v = vs.find((vv) => `${vv.name}::${vv.lang}` === voiceKey);
+        if (v) { utter.voice = v; utter.lang = v.lang || 'es-ES'; } else { utter.lang = 'es-ES'; }
+      } else {
+        const pref = vs.find((vv) => (vv.lang || '').toLowerCase().startsWith('es'));
+        if (pref) { utter.voice = pref; utter.lang = pref.lang || 'es-ES'; } else { utter.lang = 'es-ES'; }
+      }
+      utter.rate = 0.98;
+      utter.pitch = 1.0;
+      utter.volume = Math.max(0, Math.min(1, speakVolumeRef.current));
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+    } catch {}
+  }, [speakEnabled, voiceKey, voices]);
+
+  useEffect(() => {
+    if (!trained) return;
+    const v = (liveLetter || '').toUpperCase();
+    if (!['A','E','I','O','U'].includes(v)) return;
+    if (confPct < 50) return;
+    const now = performance.now();
+    const COOLDOWN_MS = 900;
+    const changed = (lastSpokenRef.current !== v);
+    const cooled = (now - lastSpokenAtRef.current) >= COOLDOWN_MS;
+    if (changed || cooled) {
+      speakVowel(v);
+      lastSpokenRef.current = v;
+      lastSpokenAtRef.current = now;
+    }
+  }, [trained, liveLetter, confPct, speakVowel]);
+
   // Detener grabación si se apaga la cámara
   useEffect(() => {
     if (!cameraOn && recordTimerRef.current) {
@@ -407,6 +474,35 @@ const Vista1: React.FC = () => {
                 <span>Total muestras (todas letras): {totalSamples}</span>
                 <span>Muestras de la letra: {selectedLetter ? selectedCount : 0}</span>
                 <span>Vocal detectada: {liveLetter ?? '–'}</span>
+              </div>
+            </div>
+
+            {/* Controles de voz (después del gráfico/contadores) */}
+            <div style={{ marginTop: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
+              <div style={{ display: 'grid', gap: 8 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={speakEnabled} onChange={(e) => setSpeakEnabled(e.currentTarget.checked)} /> Voz (leer vocal)
+                </label>
+                {speakEnabled && (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      Voz:
+                      <select value={voiceKey} onChange={(e) => setVoiceKey(e.currentTarget.value)} style={{ minWidth: 240 }}>
+                        {voices.map((vv) => (
+                          <option key={`${vv.name}::${vv.lang}`} value={`${vv.name}::${vv.lang}`}>{vv.name} ({vv.lang})</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      Volumen:
+                      <input type="range" min={0} max={1} step={0.1} value={speakVolume}
+                        onChange={(e) => setSpeakVolume(Number(e.currentTarget.value))}
+                        style={{ width: 160 }}
+                      />
+                      <span style={{ width: 28, textAlign: 'right' }}>{Math.round(speakVolume * 100)}%</span>
+                    </label>
+                  </>
+                )}
               </div>
             </div>
         </div>
