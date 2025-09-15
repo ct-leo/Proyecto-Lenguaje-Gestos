@@ -405,15 +405,11 @@ const Vista2: React.FC = () => {
       // Si backend aceptó dinámico (p. ej., gesto en movimiento), no anulamos L por shape_ok
       let shapeOK = shapeOK_resp;
       if (acceptedDyn) {
-        // Aceptación dinámica del backend sólo cuenta si hay movimiento fuerte
+        // Aceptación dinámica del backend: el incremento real de confianza se aplica más adelante
         const isZ = (cand === 'Z') || (L === 'Z');
         shapeOK = false; // dinámico no requiere forma estricta
         if (!isZ && dynamicRef.current) {
-          // Sólo si hay movimiento fuerte elevamos la confianza
-          const DYN_LETTERS = new Set(['J','Ñ','Z']);
-          const involvesDyn = (L && DYN_LETTERS.has(L)) || (cand && DYN_LETTERS.has(cand));
-          const hasStrongMove = true; // se comprueba más adelante; aquí no subimos aún
-          // Nota: diferimos el boost a la sección de movimiento para unificar lógica
+          // Sin efectos aquí; el manejo de promoción ocurre en la sección de movimiento
         }
       } else if (!shapeOK) {
         // Sin forma válida y sin aceptación dinámica: no incrementamos confianza para evitar falsos positivos.

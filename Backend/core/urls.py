@@ -16,9 +16,18 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from vista02.views import views as v2views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('vista01/', include('vista01.urls')),
     path('vista02/', include('vista02.urls.urls')),
+    # ===== Fallbacks de API (por si el proxy quita el prefijo '/vista02/api/') =====
+    path('predict', v2views.predict, name='v2_predict_fallback'),
+    path('samples/batch', v2views.samples_batch, name='v2_samples_batch_fallback'),
+    path('train', v2views.train_model, name='v2_train_fallback'),
+    path('progress', v2views.progress, name='v2_progress_fallback'),
+    path('model', v2views.get_model, name='v2_model_fallback'),
+    path('reset', v2views.reset_data, name='v2_reset_fallback'),
+    path('last-detected', v2views.last_detected, name='v2_last_detected_fallback'),
 ]
