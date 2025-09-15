@@ -26,8 +26,8 @@ export const useOptimizedRecognition = (
     confidenceThreshold = 0.5
   } = options;
 
-  const lastProcessTime = useRef(0);
-  const debounceTimer = useRef<number>();
+  const lastProcessTime = useRef<number>(0);
+  const debounceTimer = useRef<number | null>(null);
   // const resultHistory = useRef<RecognitionResult[]>([]); // Para uso futuro
   const smoothingWindow = useRef<{ letter: string; confidence: number; timestamp: number }[]>([]);
 
@@ -120,8 +120,11 @@ export const useOptimizedRecognition = (
       
       // Manage cache size
       if (cache.size >= maxCacheSize) {
-        const firstKey = cache.keys().next().value;
-        cache.delete(firstKey);
+        const iter = cache.keys().next();
+        const firstKey = iter && !iter.done ? iter.value as string : undefined;
+        if (firstKey !== undefined) {
+          cache.delete(firstKey);
+        }
       }
       
       cache.set(hash, features);

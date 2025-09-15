@@ -1,4 +1,4 @@
-import React, { Component, ReactNode } from 'react';
+import React, { Component, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import Button from './ui/Button';
 
@@ -143,7 +143,7 @@ class ErrorBoundary extends Component<Props, State> {
               </Button>
             </div>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.MODE === 'development' && this.state.error && (
               <details className="error-details">
                 <summary>Detalles técnicos (desarrollo)</summary>
                 <pre className="error-stack">
@@ -154,7 +154,7 @@ class ErrorBoundary extends Component<Props, State> {
             )}
           </div>
 
-          <style jsx>{`
+          <style>{`
             .error-boundary {
               display: flex;
               align-items: center;

@@ -137,12 +137,9 @@ const Vista1: React.FC = () => {
     selectedLetter ? (dataset.samples[selectedLetter]?.length || 0) : 0
   ), [dataset.samples, selectedLetter]);
 
-  const progressPct = useMemo(() => {
-    if (!totalSamples || totalSamples <= 0) return 0;
-    return Math.min(100, Math.round((selectedCount / totalSamples) * 100));
-  }, [selectedCount, totalSamples]);
+  // Nota: progreso relativo no utilizado actualmente; eliminado para evitar warnings
 
-  const vowels = useMemo(() => ['A','E','I','O','U'] as const, []);
+  // Nota: listado de vocales no utilizado actualmente; eliminado para evitar warnings
 
   const onLandmarks = useCallback((hands: Landmark[][]) => {
     lastHandsRef.current = hands;
@@ -222,16 +219,7 @@ const Vista1: React.FC = () => {
     }, 250);
   }, [cameraOn, hasHands, showResult]);
 
-  const toggleRecord = useCallback((letter: 'A'|'E'|'I'|'O'|'U') => {
-    setSelectedLetter(letter);
-    if (recordingLetter === letter) {
-      stopRecording();
-    } else {
-      // Si hay otro en curso, detenerlo primero
-      if (recordingLetter) stopRecording();
-      startRecording(letter);
-    }
-  }, [recordingLetter, startRecording, stopRecording]);
+  // Nota: toggleRecord no se utiliza; eliminado para evitar warnings
 
   const trainModel = useCallback(() => {
     // Simular progreso de entrenamiento y luego construir el modelo

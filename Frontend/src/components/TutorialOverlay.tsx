@@ -22,7 +22,7 @@ interface TutorialOverlayProps {
 const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
   isOpen,
   onClose,
-  steps,
+  steps: _steps,
   currentView
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
