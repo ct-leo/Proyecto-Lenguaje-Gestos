@@ -15,22 +15,19 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-=+g#)s_xh25t4)fajafc$#c1p%5w)4ibp)wa$0rz3a#ml921-7'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
-    'localhost', '127.0.0.1',
-    # Agrega aquí el dominio de tu backend en producción, por ejemplo:
-    # 'api.tu-dominio.com',
+    "89.116.186.216",
+    "localhost",
+    "127.0.0.1",
+    "devproyectos.com",
+    "www.devproyectos.com",
 ]
-
 
 # Application definition
 
@@ -41,14 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',
+    'corsheaders',  # para CORS
     'vista01',
     'vista02',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Debe ir antes de CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -76,10 +73,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-
 # Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
+# Para producción puedes cambiar a PostgreSQL/MySQL
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -87,60 +82,40 @@ DATABASES = {
     }
 }
 
-
 # Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # Para producción con collectstatic
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ===== CORS / CSRF (cuando frontend y backend están en dominios distintos) =====
-# Permite solo tu dominio de frontend en producción. Ejemplo para Vercel:
-# CORS_ALLOWED_ORIGINS = ['https://tu-frontend.vercel.app']
-# En desarrollo local, puedes dejarlo vacío o usar CORS_ALLOW_ALL_ORIGINS=True temporalmente.
+# ===== CORS / CSRF configuración para frontend =====
+CORS_ALLOWED_ORIGINS = [
+    "https://devproyectos.com",
+    "https://www.devproyectos.com",
+]
+CORS_ALLOW_CREDENTIALS = True
 
-# Descomenta y personaliza para producción segura:
-# CORS_ALLOWED_ORIGINS = [
-#     'https://tu-frontend.vercel.app',
-# ]
-# CORS_ALLOW_CREDENTIALS = True  # solo si vas a usar cookies/autenticación
+CSRF_TRUSTED_ORIGINS = [
+    "https://devproyectos.com",
+    "https://www.devproyectos.com",
+]
 
-# CSRF_TRUSTED_ORIGINS = [
-#     'https://tu-frontend.vercel.app',
-#     'https://api.tu-dominio.com',
-# ]
+# Seguridad básica adicional para producción
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
