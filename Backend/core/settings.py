@@ -27,6 +27,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "devproyectos.com",
     "www.devproyectos.com",
+    "api.devproyectos.com",  # Para subdominio API si se decide usar
 ]
 
 # Application definition
@@ -107,8 +108,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "https://devproyectos.com",
     "https://www.devproyectos.com",
+    "http://localhost:5173",  # Para desarrollo con Vite
+    "http://127.0.0.1:5173",  # Para desarrollo con Vite
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False  # Mantener False en producción
+
+# Headers CORS adicionales
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://devproyectos.com",

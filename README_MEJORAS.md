@@ -69,6 +69,7 @@ src/components/ui/Button.tsx         # Soporte para variante secondary y size
 - Efectos visuales avanzados
 - Estética futurista
 
+
 ## 🔧 **Configuración de Accesibilidad**
 
 ### ⌨️ **Navegación por Teclado**

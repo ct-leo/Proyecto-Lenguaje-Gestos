@@ -1,0 +1,21 @@
+[Unit]
+Description=gunicorn socket
+
+[Socket]
+# Socket Unix para comunicación con Nginx
+ListenStream=/run/gunicorn.sock
+
+# Permisos del socket
+# www-data debe coincidir con el usuario de Nginx
+SocketUser=www-data
+SocketGroup=www-data
+SocketMode=0660
+
+# Configuración del socket
+Backlog=512
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target
+
+
