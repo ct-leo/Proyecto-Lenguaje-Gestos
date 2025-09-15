@@ -27,6 +27,10 @@ Sistema completo de automatización para despliegue de Django con Gunicorn y Ngi
 | `setup-vps.sh` | Configuración automática del VPS | Ejecutar una vez |
 | `guia-configuracion-vps.md` | Documentación completa | Referencia |
 
+
+
+
+
 ---
 
 ## 🚀 Instalación Rápida

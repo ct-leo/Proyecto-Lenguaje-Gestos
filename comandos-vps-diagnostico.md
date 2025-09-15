@@ -227,3 +227,5 @@ sudo systemctl status nginx gunicorn-django
 # Verificar conectividad completa
 curl -v https://devproyectos.com/vista02/api/predict
 ```
+
+

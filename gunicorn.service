@@ -20,6 +20,7 @@ ExecStart=/var/www/Proyecto-Lenguaje-Gestos/venv/bin/gunicorn \
           --bind unix:/run/gunicorn.sock \
           core.wsgi:application
 
+
 # Reiniciar automáticamente si el proceso falla
 Restart=always
 RestartSec=3

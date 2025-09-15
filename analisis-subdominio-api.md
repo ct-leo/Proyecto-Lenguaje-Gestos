@@ -159,3 +159,4 @@ Es la solución más profesional y escalable. La configuración inicial es un po
 2. Configurar Nginx con ruta `/vista02/api/` (solución inmediata)
 3. Configurar subdominio `api.devproyectos.com` (mejora a futuro)
 4. Migrar frontend gradualmente al subdominio
+

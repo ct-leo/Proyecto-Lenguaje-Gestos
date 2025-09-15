@@ -352,3 +352,6 @@ trap 'log_error "Error en línea $LINENO. Saliendo..."; exit 1' ERR
 
 # Ejecutar función principal
 main "$@"
+
+
+
