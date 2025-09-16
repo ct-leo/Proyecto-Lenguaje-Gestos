@@ -24,7 +24,6 @@ const Vista2: React.FC = () => {
     return out;
   }, []);
   const [letter, setLetter] = useState<string>('A');
-  const [delLetter, setDelLetter] = useState<string>('A');
   const [sampleCount] = useState<number>(30);
   const lastHandsRef = useRef<Landmark[][]>([]);
 
@@ -493,14 +492,21 @@ const Vista2: React.FC = () => {
         const strongMove = strongMoveY || strongMoveX;
         setDynDebug(prev => `${prev}\nwin: avgC=${avgConf.toFixed(2)} shape%=${(shapeFrac*100).toFixed(0)} | dY=${amplY.toFixed(3)} Ey=${energyY.toFixed(3)} dX=${amplX.toFixed(3)} Ex=${energyX.toFixed(3)} move=${strongMove}`);
 
-        // Dinámicos (J/Ñ/Z) SOLO con movimiento: no permitir visualización sin movimiento fuerte
+        // Dinámicos (J/Ñ/Z): permitir mostrarse incluso sin movimiento fuerte, pero con confianza más baja.
+        // Sólo aplicamos una caída dura si literalmente no hay señal de forma (shapeFrac muy bajo) y avgConf muy bajo.
         {
           const DYN_LETTERS = new Set(['J','Ñ','Z']);
           const dynInvolved = (cand && DYN_LETTERS.has(cand)) || (L && DYN_LETTERS.has(L)) || (final && DYN_LETTERS.has(final));
           if (dynInvolved && !strongMove) {
-            if (final && DYN_LETTERS.has(final)) final = null;
-            if (L && DYN_LETTERS.has(L)) L = null;
-            conf = Math.min(conf, 0.15);
+            if (shapeFrac < 0.01 && avgConf < 0.15) {
+              // caso extremo: anular
+              if (final && DYN_LETTERS.has(final)) final = null;
+              if (L && DYN_LETTERS.has(L)) L = null;
+              conf = Math.min(conf, 0.15);
+            } else {
+              // permitir visualización con confianza moderada
+              conf = Math.max(conf, 0.6);
+            }
           }
         }
 
@@ -528,12 +534,11 @@ const Vista2: React.FC = () => {
           // Solo con evidencia de movimiento activamos el piso dinámico al final
           if (final && DYN_LETTERS.has(final)) dynShouldFloor = strongMove;
         } else {
-          // En dinámico, sin movimiento fuerte: anular dinámicos
+          // En dinámico, sin movimiento fuerte: caída agresiva para letras dinámicas
           const DYN_LETTERS2 = new Set(['J','Ñ','Z']);
           if (strongMove === false && ((final && DYN_LETTERS2.has(final)) || (L && DYN_LETTERS2.has(L)) || (cand && DYN_LETTERS2.has(cand)))) {
-            conf = Math.min(conf, 0.15);
-            if (final && DYN_LETTERS2.has(final)) final = null;
-            if (L && DYN_LETTERS2.has(L)) L = null;
+            // no anular por completo; solo bajar la confianza si no hay movimiento
+            conf = Math.min(conf, 0.5);
             // liberar bloqueo si era dinámico
             if (lockLetterRef.current && DYN_LETTERS2.has(lockLetterRef.current)) {
               lockLetterRef.current = null; lockThrRef.current = 0; mismatchCountRef.current = 0;
@@ -667,51 +672,6 @@ const Vista2: React.FC = () => {
     }
   }, [refreshModel, refreshProgress]);
 
-  const resetOneLetter = useCallback(async () => {
-    const L = delLetter;
-    if (!L) return;
-    if (L === 'ALL') {
-      if (!confirm('Esto eliminará TODAS las letras (A–Z/Ñ) y los modelos entrenados. ¿Continuar?')) return;
-      try {
-        const resp = await api.reset();
-        if ((resp as any).status === 'ok') {
-          // Reiniciar contadores de sesión para todas las letras
-          setSessionCounts((prev) => {
-            const copy = { ...prev } as Record<string, number>;
-            for (const k of letters) copy[k] = 0;
-            return copy;
-          });
-          await refreshProgress(false, false);
-          await refreshModel(false);
-          setPrediction({ letter: null, distance: null, threshold: null });
-          setStatusMsg('Todas las letras eliminadas. Reentrena el modelo.');
-          speakText('Todas las letras eliminadas');
-        } else {
-          setStatusMsg('No se pudo eliminar A–Z');
-        }
-      } catch {
-        setStatusMsg('Error eliminando A–Z');
-      }
-      return;
-    }
-    if (!confirm(`Esto eliminará todas las muestras de la letra ${L} y borrará los modelos entrenados. ¿Continuar?`)) return;
-    try {
-      const resp = await api.resetLetter(L);
-      if ((resp as any).status === 'ok') {
-        // Si la letra eliminada es la actualmente seleccionada para sesión, limpiar su contador de sesión
-        setSessionCounts((prev) => ({ ...prev, [L]: 0 }));
-        await refreshProgress(false, false);
-        await refreshModel(false);
-        setStatusMsg(`Letra ${L} eliminada. Reentrena el modelo para continuar.`);
-        speakText(`Letra ${L} eliminada`);
-      } else {
-        setStatusMsg(`No se pudo eliminar la letra ${L}`);
-      }
-    } catch {
-      setStatusMsg(`Error eliminando la letra ${L}`);
-    }
-  }, [delLetter, refreshModel, refreshProgress, speakText]);
-
   // Ocultar scroll mientras esta vista está activa
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -792,23 +752,6 @@ const Vista2: React.FC = () => {
                 }}
               /> Modo dinámico
             </label>
-          </div>
-
-          <div className="delete-letter-controls" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              Eliminar:
-              <SelectMenu
-                value={delLetter}
-                onChange={(v) => setDelLetter(v)}
-                options={[{ label: 'Todas (A–Z)', value: 'ALL' }, ...letters.map((L) => ({ label: L, value: L }))]}
-                width={140}
-              />
-            </label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button variant="danger" onClick={resetOneLetter}>
-                {delLetter === 'ALL' ? 'Eliminar A–Z y modelos' : 'Eliminar letra y modelos'}
-              </Button>
-            </div>
           </div>
 
           <div className="voice-controls" style={{ display: 'grid', gap: 8 }}>

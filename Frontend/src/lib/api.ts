@@ -82,15 +82,7 @@ async function predict(
 
 async function reset() { return request(`/reset`, { method: 'POST' }) }
 
-async function resetLetter(letter: string) {
-  return request(`/reset-letter`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ letter }),
-  })
-}
-
-export const api = { getModel, progress, lastDetected, samplesBatch, train, predict, reset, resetLetter }
+export const api = { getModel, progress, lastDetected, samplesBatch, train, predict, reset }
 export default api
 
 // ===== Feature extraction (same as ejemplo2_frontend.html) =====

@@ -171,12 +171,10 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
         for (let idx = 0; idx < all.length; idx++) {
           const lms = all[idx]
           const label = String(handed?.[idx]?.label || '').toLowerCase();
-          const isRightLabel = label === 'right';
-          // Cuando espejamos el canvas, la derecha/izquierda en pantalla se invierte respecto a la etiqueta del modelo
-          const isRightVisual = mirror ? !isRightLabel : isRightLabel;
-          // Colores por mano en pantalla: derecha (visual) azul, izquierda (visual) roja
-          const connColor = isRightVisual ? '#2563eb' : '#dc2626';
-          const ptColor = isRightVisual ? '#3b82f6' : '#ef4444';
+          const isRight = label === 'right';
+          // Colores por mano: derecha azul, izquierda roja
+          const connColor = isRight ? '#2563eb' : '#dc2626';
+          const ptColor = isRight ? '#3b82f6' : '#ef4444';
           // Depth-aware order: draw farther first, nearer last
           const connSorted = (CONN as any).slice().sort((c1: any, c2: any) => {
             const z1 = ((lms[c1[0]].z ?? 0) + (lms[c1[1]].z ?? 0)) / 2;

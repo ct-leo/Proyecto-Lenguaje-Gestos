@@ -8,7 +8,6 @@ from ..views.views import (
     demo,
     reset_data,
     predict,
-    reset_letter,
 )
 
 app_name = "vista02"
@@ -20,7 +19,6 @@ urlpatterns = [
     path("api/model", get_model, name="get_model"),
     path("api/last-detected", last_detected, name="last_detected"),
     path("api/reset", reset_data, name="reset_data"),
-    path("api/reset-letter", reset_letter, name="reset_letter"),
     path("api/predict", predict, name="predict"),
     path("demo/", demo, name="demo"),
 ]
