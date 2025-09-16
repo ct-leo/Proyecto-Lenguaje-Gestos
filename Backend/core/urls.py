@@ -29,5 +29,6 @@ urlpatterns = [
     path('progress', v2views.progress, name='v2_progress_fallback'),
     path('model', v2views.get_model, name='v2_model_fallback'),
     path('reset', v2views.reset_data, name='v2_reset_fallback'),
+    path('reset-letter', v2views.reset_letter, name='v2_reset_letter_fallback'),
     path('last-detected', v2views.last_detected, name='v2_last_detected_fallback'),
 ]

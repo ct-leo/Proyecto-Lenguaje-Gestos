@@ -38,6 +38,7 @@ from ..services.feature_extractor import extract_feature_vector
 from ..services.trainer import compute_centroids, compute_thresholds, predict_with_thresholds
 from django.conf import settings
 import os
+import re
 
 
 @csrf_exempt
@@ -212,6 +213,72 @@ def reset_data(request):
         TrainingModel.objects.all().delete()
         _invalidate_model_cache()
         return JsonResponse({"status": "ok", "message": "Datos reiniciados"})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def reset_letter(request):
+    """Elimina todas las muestras de una letra específica y borra los modelos entrenados.
+
+    Body JSON: { "letter": "A" }
+    Acepta A..Z y Ñ.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"status": "error", "message": "JSON inválido"}, status=400)
+
+    letter = str(payload.get("letter", "")).upper()
+    if not re.match(r"^[A-ZÑ]$", letter):
+        return JsonResponse({"status": "error", "message": "Letra inválida"}, status=400)
+
+    try:
+        # Eliminar muestras de la letra
+        HandSample.objects.filter(letter=letter).delete()
+        # Actualizar modelos entrenados: quitar solo la letra seleccionada
+        to_delete_ids = []
+        for m in TrainingModel.objects.all():
+            # Copias mutables de los campos JSON
+            centroids = dict(m.centroids or {})
+            thresholds = dict(getattr(m, 'thresholds', {}) or {})
+            letters_list = list(m.letters or [])
+            changed = False
+            if letter in centroids:
+                centroids.pop(letter, None)
+                changed = True
+            if letter in thresholds:
+                thresholds.pop(letter, None)
+                changed = True
+            if letter in letters_list:
+                letters_list = [L for L in letters_list if L != letter]
+                changed = True
+            # Si tras quitar la letra no quedan letras, marcar para borrar el modelo
+            if changed and not letters_list:
+                to_delete_ids.append(m.id)
+                continue
+            if changed:
+                m.centroids = centroids
+                m.thresholds = thresholds
+                m.letters = letters_list
+                m.save(update_fields=["centroids", "thresholds", "letters"])
+        if to_delete_ids:
+            TrainingModel.objects.filter(id__in=to_delete_ids).delete()
+        _invalidate_model_cache()
+        # Devolver resumen actualizado
+        counts = HandSample.objects.values("letter").annotate(c=Count("id"))
+        summary = {row["letter"]: row["c"] for row in counts}
+        total = sum(summary.values())
+        latest = _get_cached_model()
+        out_model_letters = latest.get("letters") if latest else None
+        return JsonResponse({
+            "status": "ok",
+            "message": f"Letra {letter} eliminada de muestras y modelos actualizados",
+            "totals": summary,
+            "total": total,
+            "model_letters": out_model_letters,
+        })
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 

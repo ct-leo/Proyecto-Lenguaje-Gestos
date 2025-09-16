@@ -1,13 +1,76 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Landmark } from '../lib/api'
 
+// ---- Math helpers for hand-local normalization ----
+type V3 = { x: number; y: number; z: number }
+const vsub = (a: V3, b: V3): V3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z })
+const vdot = (a: V3, b: V3): number => a.x * b.x + a.y * b.y + a.z * b.z
+const vlen = (a: V3): number => Math.hypot(a.x, a.y, a.z)
+const vnorm = (a: V3): V3 => {
+  const L = vlen(a) || 1e-6
+  return { x: a.x / L, y: a.y / L, z: a.z / L }
+}
+const vcross = (a: V3, b: V3): V3 => ({
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+})
+
+// Build a hand-local orthonormal basis using wrist (0), index MCP (5), pinky MCP (17)
+function buildHandBasis(lms: V3[]) {
+  const wrist = lms[0];
+  const indexMcp = lms[5];
+  const pinkyMcp = lms[17];
+  const v1 = vsub(indexMcp, wrist); // roughly +X
+  const v2 = vsub(pinkyMcp, wrist); // roughly -X for left hand
+  let xAxis = vnorm(v1)
+  const palmNormal = vnorm(vcross(v1, v2)) // roughly +Z pointing out of palm
+  let yAxis = vnorm(vcross(palmNormal, xAxis)) // complete right-handed basis
+  // Re-orthogonalize X against Y just in case
+  xAxis = vnorm(vcross(yAxis, palmNormal))
+  const zAxis = palmNormal
+  return { origin: wrist, xAxis, yAxis, zAxis }
+}
+
+// Transform world landmark to hand-local coordinates, then scale by a reference length
+function worldToHandLocal(lms: V3[], handedLabel: string) {
+  const { origin, xAxis, yAxis, zAxis } = buildHandBasis(lms)
+  // Reference scale: distance wrist->middle MCP
+  const ref = vlen(vsub(lms[9], origin)) || 1e-3
+  const invRef = 1 / ref
+  const res = lms.map(p => {
+    const r = vsub(p, origin)
+    // rows of R^T are basis vectors -> coordinates are dots
+    let hx = vdot(r, xAxis)
+    let hy = vdot(r, yAxis)
+    let hz = vdot(r, zAxis)
+    // Mirror X for left hand to align both hands to the same canonical frame
+    if (handedLabel === 'left') hx = -hx
+    return { x: hx * invRef, y: hy * invRef, z: hz * invRef }
+  })
+  return res
+}
+
+// Exponential moving average smoothing per hand and per landmark
+function smoothLandmarks(prev: V3[] | null, curr: V3[], alpha = 0.4): V3[] {
+  if (!prev || prev.length !== curr.length) return curr
+  const beta = 1 - alpha
+  return curr.map((c, i) => ({
+    x: alpha * c.x + beta * prev[i].x,
+    y: alpha * c.y + beta * prev[i].y,
+    z: alpha * c.z + beta * prev[i].z,
+  }))
+}
+
 type Props = {
   onLandmarks?: (hands: Landmark[][]) => void
   cameraOn?: boolean
   mirror?: boolean
+  // If true, the callback receives stabilized, hand-local landmarks (orientation/escala invariantes)
+  stabilizeForRecognition?: boolean
 }
 
-export default function HandCapture({ onLandmarks, cameraOn = true, mirror = true }: Props) {
+export default function HandCapture({ onLandmarks, cameraOn = true, mirror = true, stabilizeForRecognition = true }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -18,6 +81,9 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
   // Keep a stable ref to onLandmarks so changing parent callback doesn't restart camera
   const onLandmarksRef = useRef<Props['onLandmarks'] | undefined>(undefined)
   onLandmarksRef.current = onLandmarks
+
+  // Keep smoothed landmarks per hand index (0/1). We cannot rely on persistent IDs, so we map by index per frame.
+  const smoothRef = useRef<{ [k: string]: V3[] | null }>({})
 
   const [mpReady, setMpReady] = useState(false)
   // Ensure CDN scripts are present (drawing_utils, camera_utils, hands)
@@ -105,10 +171,12 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
         for (let idx = 0; idx < all.length; idx++) {
           const lms = all[idx]
           const label = String(handed?.[idx]?.label || '').toLowerCase();
-          const isRight = label === 'right';
-          // Colores por mano: derecha azul, izquierda roja
-          const connColor = isRight ? '#2563eb' : '#dc2626';
-          const ptColor = isRight ? '#3b82f6' : '#ef4444';
+          const isRightLabel = label === 'right';
+          // Cuando espejamos el canvas, la derecha/izquierda en pantalla se invierte respecto a la etiqueta del modelo
+          const isRightVisual = mirror ? !isRightLabel : isRightLabel;
+          // Colores por mano en pantalla: derecha (visual) azul, izquierda (visual) roja
+          const connColor = isRightVisual ? '#2563eb' : '#dc2626';
+          const ptColor = isRightVisual ? '#3b82f6' : '#ef4444';
           // Depth-aware order: draw farther first, nearer last
           const connSorted = (CONN as any).slice().sort((c1: any, c2: any) => {
             const z1 = ((lms[c1[0]].z ?? 0) + (lms[c1[1]].z ?? 0)) / 2;
@@ -146,7 +214,21 @@ export default function HandCapture({ onLandmarks, cameraOn = true, mirror = tru
           }
         }
         if (onLandmarksRef.current) {
-          const mapped: Landmark[][] = all.map((l: any) => l.map((p: any) => ({ x: p.x, y: p.y, z: p.z })))
+          let mapped: Landmark[][]
+          if (stabilizeForRecognition) {
+            // Produce normalized & smoothed landmarks in a hand-local frame
+            mapped = all.map((l: any, i: number) => {
+              const raw: V3[] = l.map((p: any) => ({ x: p.x, y: p.y, z: p.z }))
+              const lbl = String(handed?.[i]?.label || '').toLowerCase()
+              const local = worldToHandLocal(raw, lbl)
+              const key = `hand_${i}`
+              const smoothed = smoothLandmarks(smoothRef.current[key] || null, local, 0.45)
+              smoothRef.current[key] = smoothed
+              return smoothed
+            }) as unknown as Landmark[][]
+          } else {
+            mapped = all.map((l: any) => l.map((p: any) => ({ x: p.x, y: p.y, z: p.z })))
+          }
           try { onLandmarksRef.current(mapped) } catch {}
         }
       })
