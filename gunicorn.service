@@ -5,18 +5,23 @@ After=network.target
 
 [Service]
 # Usuario y grupo bajo el cual se ejecutará Gunicorn
-# IMPORTANTE: Cambiar 'www-data' por tu usuario real del VPS
-User=www-data
+User=root
 Group=www-data
 
 # Directorio de trabajo
 WorkingDirectory=/var/www/Proyecto-Lenguaje-Gestos/Backend
 
 # Comando para ejecutar Gunicorn
-# Ajustar la ruta del entorno virtual según tu configuración
 ExecStart=/var/www/Proyecto-Lenguaje-Gestos/venv/bin/gunicorn \
           --access-logfile - \
+          --error-logfile - \
           --workers 3 \
+          --worker-class sync \
+          --worker-connections 1000 \
+          --max-requests 1000 \
+          --max-requests-jitter 100 \
+          --timeout 30 \
+          --keep-alive 2 \
           --bind unix:/run/gunicorn.sock \
           core.wsgi:application
 
@@ -29,6 +34,8 @@ RestartSec=3
 # Variables de entorno
 Environment="DJANGO_SETTINGS_MODULE=core.settings"
 Environment="PYTHONPATH=/var/www/Proyecto-Lenguaje-Gestos/Backend"
+Environment="PATH=/var/www/Proyecto-Lenguaje-Gestos/venv/bin"
+Environment="VIRTUAL_ENV=/var/www/Proyecto-Lenguaje-Gestos/venv"
 
 # Configuración de seguridad
 NoNewPrivileges=true

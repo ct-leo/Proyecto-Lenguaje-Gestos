@@ -9,10 +9,12 @@ set -e  # Salir si cualquier comando falla
 # Configuración
 PROJECT_DIR="/var/www/Proyecto-Lenguaje-Gestos"
 BACKEND_DIR="$PROJECT_DIR/Backend"
-BRANCH="${1:-main}"  # Usar branch pasado como parámetro o 'main' por defecto
-VENV_PATH="$PROJECT_DIR/venv"  # Ajustar según tu configuración
+FRONTEND_DIR="$PROJECT_DIR/Frontend"
+BRANCH="${1:-VISTA-2-ADRIEL}"  # Usar branch pasado como parámetro o 'VISTA-2-ADRIEL' por defecto
+VENV_PATH="$PROJECT_DIR/venv"
 GUNICORN_SERVICE="gunicorn"
 NGINX_SERVICE="nginx"
+USER_NAME="root"
 
 
 # Colores para output
@@ -39,9 +41,9 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Verificar que el script se ejecuta como usuario correcto
-if [ "$EUID" -eq 0 ]; then
-    log_error "No ejecutar este script como root. Usar usuario con permisos sudo."
+# Verificar que el script se ejecuta como root
+if [ "$EUID" -ne 0 ]; then
+    log_error "Este script debe ejecutarse como root para gestionar servicios del sistema."
     exit 1
 fi
 
@@ -59,14 +61,28 @@ check_service() {
 # Función para backup de la base de datos
 backup_database() {
     log "Creando backup de la base de datos..."
+    
+    # Crear directorio de backups si no existe
     BACKUP_DIR="$PROJECT_DIR/backups"
     mkdir -p $BACKUP_DIR
     
-    if [ -f "$BACKEND_DIR/db.sqlite3" ]; then
-        cp "$BACKEND_DIR/db.sqlite3" "$BACKUP_DIR/db_backup_$(date +%Y%m%d_%H%M%S).sqlite3"
-        log_success "Backup de SQLite creado"
+    # Crear backup con timestamp
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    BACKUP_FILE="$BACKUP_DIR/db_backup_$TIMESTAMP.json"
+    
+    cd $BACKEND_DIR
+    source $VENV_PATH/bin/activate
+    
+    # Hacer backup usando dumpdata de Django
+    python manage.py dumpdata --natural-foreign --natural-primary > $BACKUP_FILE
+    
+    if [ $? -eq 0 ]; then
+        log_success "Backup creado: $BACKUP_FILE"
+        # Mantener solo los últimos 5 backups
+        ls -t $BACKUP_DIR/db_backup_*.json | tail -n +6 | xargs -r rm
     else
-        log_warning "No se encontró db.sqlite3, saltando backup"
+        log_error "Error al crear backup"
+        exit 1
     fi
 }
 
@@ -146,28 +162,42 @@ deploy() {
     # 13. Reiniciar servicios
     log "Reiniciando servicios..."
     
+    # Compilar frontend si existe
+    if [ -d "$FRONTEND_DIR" ]; then
+        log "Compilando frontend..."
+        cd $FRONTEND_DIR
+        if [ -f "package.json" ]; then
+            npm install
+            npm run build
+            log_success "Frontend compilado"
+        else
+            log_warning "No se encontró package.json en el frontend"
+        fi
+        cd $BACKEND_DIR
+    fi
+    
     # Reiniciar Gunicorn
     log "Reiniciando Gunicorn..."
-    sudo systemctl restart $GUNICORN_SERVICE
+    systemctl restart $GUNICORN_SERVICE
     sleep 2
     
     if check_service $GUNICORN_SERVICE; then
         log_success "Gunicorn reiniciado correctamente"
     else
         log_error "Error al reiniciar Gunicorn"
-        sudo journalctl -u $GUNICORN_SERVICE --no-pager -n 20
+        journalctl -u $GUNICORN_SERVICE --no-pager -n 20
         exit 1
     fi
     
     # Recargar Nginx
     log "Recargando Nginx..."
-    sudo systemctl reload $NGINX_SERVICE
+    systemctl reload $NGINX_SERVICE
     
     if check_service $NGINX_SERVICE; then
         log_success "Nginx recargado correctamente"
     else
         log_error "Error al recargar Nginx"
-        sudo tail -n 20 /var/log/nginx/error.log
+        tail -n 20 /var/log/nginx/error.log
         exit 1
     fi
     
@@ -227,50 +257,78 @@ show_logs() {
     log "=== LOGS RECIENTES ==="
     
     echo "Gunicorn logs (últimas 20 líneas):"
-    sudo journalctl -u $GUNICORN_SERVICE --no-pager -n 20
+    journalctl -u $GUNICORN_SERVICE --no-pager -n 20
     echo ""
     
     echo "Nginx error logs (últimas 20 líneas):"
-    sudo tail -n 20 /var/log/nginx/error.log
+    tail -n 20 /var/log/nginx/error.log
     echo ""
     
     echo "Nginx access logs (últimas 10 líneas):"
-    sudo tail -n 10 /var/log/nginx/access.log
+    tail -n 10 /var/log/nginx/access.log
 }
 
 # Función para rollback
 rollback() {
-    log "=== INICIANDO ROLLBACK ==="
+    log "Iniciando rollback..."
     
-    cd $PROJECT_DIR
+    # Buscar el último backup
+    BACKUP_DIR="$PROJECT_DIR/backups"
+    LATEST_BACKUP=$(ls -t $BACKUP_DIR/db_backup_*.json 2>/dev/null | head -n 1)
     
-    # Obtener el commit anterior
-    PREVIOUS_COMMIT=$(git rev-parse HEAD~1)
-    CURRENT_COMMIT=$(git rev-parse HEAD)
-    
-    log "Commit actual: $CURRENT_COMMIT"
-    log "Rollback a: $PREVIOUS_COMMIT"
-    
-    # Confirmar rollback
-    read -p "¿Confirmar rollback? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log "Rollback cancelado"
-        exit 0
+    if [ -z "$LATEST_BACKUP" ]; then
+        log_error "No se encontraron backups para rollback"
+        exit 1
     fi
     
-    # Hacer rollback
-    git reset --hard HEAD~1
+    log "Usando backup: $LATEST_BACKUP"
     
-    # Ejecutar despliegue con el código anterior
-    deploy
+    cd $BACKEND_DIR
+    source $VENV_PATH/bin/activate
+    
+    # Restaurar backup
+    python manage.py flush --noinput
+    python manage.py loaddata $LATEST_BACKUP
+    
+    if [ $? -eq 0 ]; then
+        log_success "Rollback completado"
+        
+        # Reiniciar servicios
+        systemctl restart $GUNICORN_SERVICE
+        systemctl reload $NGINX_SERVICE
+        
+        log_success "Servicios reiniciados"
+    else
+        log_error "Error durante el rollback"
+        exit 1
+    fi
 }
 
 # Función principal
 main() {
     case "${1:-deploy}" in
         "deploy")
+            BRANCH="${2:-$BRANCH}"
+            log "=== INICIANDO DESPLIEGUE ==="
+            log "Branch: $BRANCH"
+            log "Directorio del proyecto: $PROJECT_DIR"
+            
+            # Verificar que el directorio del proyecto existe
+            if [ ! -d "$PROJECT_DIR" ]; then
+                log_error "El directorio del proyecto no existe: $PROJECT_DIR"
+                exit 1
+            fi
+            
+            # Cambiar al directorio del proyecto
+            cd $PROJECT_DIR
+            
+            # Hacer backup antes del despliegue
+            backup_database
+            
+            # Ejecutar despliegue
             deploy
+            
+            log_success "=== DESPLIEGUE COMPLETADO ==="
             ;;
         "status")
             show_status

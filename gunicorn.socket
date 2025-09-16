@@ -1,13 +1,13 @@
 [Unit]
-Description=gunicorn socket
+Description=gunicorn socket for Django Proyecto-Lenguaje-Gestos
 
 [Socket]
 # Socket Unix para comunicación con Nginx
 ListenStream=/run/gunicorn.sock
 
 # Permisos del socket
-# www-data debe coincidir con el usuario de Nginx
-SocketUser=www-data
+# root puede crear el socket, www-data puede acceder
+SocketUser=root
 SocketGroup=www-data
 SocketMode=0660
 

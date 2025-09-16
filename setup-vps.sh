@@ -16,9 +16,10 @@ NC='\033[0m'
 # Configuración
 PROJECT_NAME="Proyecto-Lenguaje-Gestos"
 PROJECT_DIR="/var/www/$PROJECT_NAME"
-GIT_REPO="https://github.com/tu-usuario/$PROJECT_NAME.git"  # CAMBIAR POR TU REPO
-DOMAIN="devproyectos.com"  # CAMBIAR POR TU DOMINIO
-USER_NAME="$(whoami)"
+GIT_REPO="https://github.com/ct-leo/Proyecto-Lenguaje-Gestos.git"
+DOMAIN="devproyectos.com"
+BRANCH="VISTA-2-ADRIEL"  # Branch principal de despliegue
+USER_NAME="root"  # Usuario del VPS
 
 # Funciones de logging
 log() {
@@ -52,11 +53,11 @@ command_exists() {
 # Función para instalar paquetes
 install_packages() {
     log "Actualizando sistema e instalando paquetes..."
-    sudo apt update
-    sudo apt upgrade -y
+    apt update
+    apt upgrade -y
     
     # Paquetes esenciales
-    sudo apt install -y \
+    apt install -y \
         python3 \
         python3-pip \
         python3-venv \
@@ -71,7 +72,8 @@ install_packages() {
         python3-certbot-nginx \
         build-essential \
         libpq-dev \
-        postgresql-client
+        postgresql-client \
+        ufw
     
     log_success "Paquetes instalados"
 }
@@ -81,15 +83,15 @@ setup_firewall() {
     log "Configurando firewall..."
     
     # Habilitar UFW si no está activo
-    if ! sudo ufw status | grep -q "Status: active"; then
-        sudo ufw --force enable
+    if ! ufw status | grep -q "Status: active"; then
+        ufw --force enable
     fi
     
     # Reglas básicas
-    sudo ufw allow ssh
-    sudo ufw allow 'Nginx Full'
-    sudo ufw allow 80
-    sudo ufw allow 443
+    ufw allow ssh
+    ufw allow 'Nginx Full'
+    ufw allow 80
+    ufw allow 443
     
     log_success "Firewall configurado"
 }
@@ -101,12 +103,14 @@ setup_project() {
     # Crear directorio si no existe
     if [ ! -d "$PROJECT_DIR" ]; then
         log "Clonando repositorio..."
-        sudo git clone $GIT_REPO $PROJECT_DIR
-        sudo chown -R $USER_NAME:$USER_NAME $PROJECT_DIR
+        git clone $GIT_REPO $PROJECT_DIR
+        chown -R $USER_NAME:$USER_NAME $PROJECT_DIR
     else
         log "Directorio del proyecto ya existe, actualizando..."
         cd $PROJECT_DIR
-        git pull origin main
+        git fetch origin
+        git checkout $BRANCH
+        git pull origin $BRANCH
     fi
     
     cd $PROJECT_DIR
@@ -161,28 +165,32 @@ setup_systemd() {
     # Copiar archivos de servicio
     if [ -f "$PROJECT_DIR/gunicorn.service" ]; then
         # Personalizar archivo de servicio con el usuario actual
-        sed "s/User=www-data/User=$USER_NAME/g; s/Group=www-data/Group=$USER_NAME/g" $PROJECT_DIR/gunicorn.service | sudo tee /etc/systemd/system/gunicorn.service > /dev/null
-        sudo cp $PROJECT_DIR/gunicorn.socket /etc/systemd/system/
+        sed "s/User=www-data/User=$USER_NAME/g; s/Group=www-data/Group=$USER_NAME/g" $PROJECT_DIR/gunicorn.service | tee /etc/systemd/system/gunicorn.service > /dev/null
+        cp $PROJECT_DIR/gunicorn.socket /etc/systemd/system/
     else
         log_error "No se encontraron archivos de servicio"
         exit 1
     fi
     
     # Ajustar permisos
-    sudo chown -R $USER_NAME:www-data $PROJECT_DIR
-    sudo chmod -R 755 $PROJECT_DIR
+    chown -R $USER_NAME:www-data $PROJECT_DIR
+    chmod -R 755 $PROJECT_DIR
+    
+    # Crear directorio para socket si no existe
+    mkdir -p /run
+    chown $USER_NAME:www-data /run
     
     # Recargar systemd
-    sudo systemctl daemon-reload
+    systemctl daemon-reload
     
     # Habilitar servicios
-    sudo systemctl enable gunicorn.socket
-    sudo systemctl enable gunicorn.service
-    sudo systemctl enable nginx
+    systemctl enable gunicorn.socket
+    systemctl enable gunicorn.service
+    systemctl enable nginx
     
     # Iniciar servicios
-    sudo systemctl start gunicorn.socket
-    sudo systemctl start gunicorn.service
+    systemctl start gunicorn.socket
+    systemctl start gunicorn.service
     
     log_success "Servicios systemd configurados"
 }
@@ -193,20 +201,20 @@ setup_nginx() {
     
     # Copiar configuración de Nginx
     if [ -f "$PROJECT_DIR/nginx-devproyectos.conf" ]; then
-        # Personalizar configuración con el dominio
-        sed "s/devproyectos.com/$DOMAIN/g" $PROJECT_DIR/nginx-devproyectos.conf | sudo tee /etc/nginx/sites-available/$DOMAIN > /dev/null
+        # Personalizar configuración con rutas correctas
+        sed "s|/var/www/devproyectos.com|$PROJECT_DIR/Frontend/dist|g; s|proxy_pass http://127.0.0.1:8000|proxy_pass http://unix:/run/gunicorn.sock|g" $PROJECT_DIR/nginx-devproyectos.conf | tee /etc/nginx/sites-available/$DOMAIN > /dev/null
         
         # Habilitar sitio
-        sudo ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+        ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
         
         # Deshabilitar sitio por defecto
-        sudo rm -f /etc/nginx/sites-enabled/default
+        rm -f /etc/nginx/sites-enabled/default
         
         # Verificar configuración
-        sudo nginx -t
+        nginx -t
         
         # Recargar Nginx
-        sudo systemctl reload nginx
+        systemctl reload nginx
     else
         log_error "No se encontró configuración de Nginx"
         exit 1
@@ -230,10 +238,13 @@ setup_ssl() {
     fi
     
     # Obtener certificado SSL
-    sudo certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN
+    certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN
+    
+    # Configurar renovación automática
+    echo "0 12 * * * /usr/bin/certbot renew --quiet" | crontab -
     
     # Verificar renovación automática
-    sudo certbot renew --dry-run
+    certbot renew --dry-run
     
     log_success "SSL configurado"
 }
@@ -243,11 +254,11 @@ setup_deploy_script() {
     log "Instalando script de despliegue..."
     
     if [ -f "$PROJECT_DIR/deploy.sh" ]; then
-        sudo cp $PROJECT_DIR/deploy.sh /usr/local/bin/
-        sudo chmod +x /usr/local/bin/deploy.sh
+        cp $PROJECT_DIR/deploy.sh /usr/local/bin/
+        chmod +x /usr/local/bin/deploy.sh
         
-        # Crear enlace simbólico
-        ln -sf /usr/local/bin/deploy.sh $PROJECT_DIR/deploy.sh
+        # Hacer ejecutable el script local también
+        chmod +x $PROJECT_DIR/deploy.sh
     else
         log_error "No se encontró script de despliegue"
         exit 1
@@ -321,15 +332,12 @@ show_summary() {
 main() {
     log "=== INICIANDO CONFIGURACIÓN DEL VPS ==="
     
-    # Verificar que no se ejecuta como root
-    if [ "$EUID" -eq 0 ]; then
-        log_error "No ejecutar este script como root"
-        exit 1
-    fi
+    # Mensaje de bienvenida
+    log "Configurando VPS para $DOMAIN con usuario $USER_NAME"
     
-    # Verificar configuración
-    if [ "$GIT_REPO" = "https://github.com/tu-usuario/Proyecto-Lenguaje-Gestos.git" ]; then
-        log_error "Debes cambiar GIT_REPO por tu repositorio real"
+    # Verificar que estamos ejecutando como root
+    if [ "$EUID" -ne 0 ]; then
+        log_error "Este script debe ejecutarse como root para configurar servicios del sistema"
         exit 1
     fi
     
